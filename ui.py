@@ -194,7 +194,8 @@ class CharacterManager:
             with open(voice_path, 'rb') as audio_file:
                 audio_data = audio_file.read()
             
-            # 获取文件扩展名
+            # 获取原始文件名和扩展名
+            orig_filename = os.path.basename(voice_path)
             file_extension = os.path.splitext(voice_path)[1]
             
             # 创建角色数据结构
@@ -202,6 +203,7 @@ class CharacterManager:
                 "name": name,
                 "audio_data": audio_data,  # 直接保存音频二进制数据
                 "audio_extension": file_extension,  # 保存扩展名以便后续使用
+                "original_filename": orig_filename,  # 保存原始文件名
                 "created_time": time.time()
             }
             
@@ -231,9 +233,15 @@ class CharacterManager:
                 temp_dir = os.path.join(self.prompt_dir, "temp")
                 os.makedirs(temp_dir, exist_ok=True)
                 
-                # 生成临时文件路径
-                extension = character_data.get("audio_extension", ".wav")
-                temp_audio_path = os.path.join(temp_dir, f"{name}{extension}")
+                # 使用原始文件名（如果存在），否则使用角色名加扩展名
+                if "original_filename" in character_data and character_data["original_filename"]:
+                    # 为防止文件名冲突，添加前缀
+                    filename = f"{name}_{character_data['original_filename']}"
+                else:
+                    extension = character_data.get("audio_extension", ".wav")
+                    filename = f"{name}{extension}"
+                
+                temp_audio_path = os.path.join(temp_dir, filename)
                 
                 # 写入音频数据到临时文件
                 with open(temp_audio_path, "wb") as audio_file:
@@ -257,19 +265,30 @@ class CharacterManager:
             if not os.path.exists(pickle_path):
                 return False
             
+            # 先获取角色数据，检查原始文件名
+            try:
+                with open(pickle_path, "rb") as f:
+                    character_data = pickle.load(f)
+                    
+                # 尝试删除临时文件
+                temp_dir = os.path.join(self.prompt_dir, "temp")
+                if os.path.exists(temp_dir):
+                    # 如果有原始文件名，尝试删除对应的临时文件
+                    if "original_filename" in character_data and character_data["original_filename"]:
+                        temp_path = os.path.join(temp_dir, f"{name}_{character_data['original_filename']}")
+                        if os.path.exists(temp_path):
+                            os.remove(temp_path)
+                    else:
+                        # 否则尝试删除各种可能的扩展名文件
+                        for ext in [".wav", ".mp3", ".flac", ".ogg"]:
+                            temp_path = os.path.join(temp_dir, f"{name}{ext}")
+                            if os.path.exists(temp_path):
+                                os.remove(temp_path)
+            except:
+                pass  # 即使获取角色数据失败，也继续删除pickle文件
+            
             # 删除pickle文件
             os.remove(pickle_path)
-            
-            # 尝试删除临时音频文件（如果存在）
-            temp_dir = os.path.join(self.prompt_dir, "temp")
-            for ext in [".wav", ".mp3", ".flac", ".ogg"]:
-                temp_path = os.path.join(temp_dir, f"{name}{ext}")
-                if os.path.exists(temp_path):
-                    try:
-                        os.remove(temp_path)
-                    except:
-                        pass
-            
             return True
         except Exception as e:
             print(f"删除角色出错: {str(e)}")
@@ -696,6 +715,7 @@ class MainWindow(QMainWindow):
             if os.path.exists(temp_dir):
                 import shutil
                 shutil.rmtree(temp_dir, ignore_errors=True)
+                print("临时文件清理完成")
         except Exception as e:
             print(f"清理临时文件出错: {str(e)}")
     
