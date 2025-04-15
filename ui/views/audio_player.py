@@ -110,8 +110,8 @@ class AudioPlayer(QWidget):
             self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
             self.waveformPlot.setMinimumHeight(80)  # 确保有最小高度
             
-            # 初始化波形图数据 - 使用更明显的颜色和线宽
-            self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color='blue', width=2.0))
+            # 初始化波形图数据 - 使用淡灰色
+            self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=(200, 200, 200), width=1.5))
             self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color='red', width=1.5))
             self.waveformPlot.addItem(self.positionLine)
             
@@ -223,8 +223,8 @@ class AudioPlayer(QWidget):
                 
                 # 处理过长的音频，降采样以提高UI性能
                 if len(audio_data) > 10000:
-                    # 确保不会除以0
-                    step = max(1, len(audio_data) // 10000)
+                    # 增加降采样力度以提高效率
+                    step = max(1, len(audio_data) // 5000)
                     audio_data = audio_data[::step]
                     print(f"降采样后长度: {len(audio_data)}")
                 
@@ -250,8 +250,8 @@ class AudioPlayer(QWidget):
                 
                 # 处理过长的音频
                 if len(audio_data) > 10000:
-                    # 确保不会除以0
-                    step = max(1, len(audio_data) // 10000)
+                    # 增加降采样力度以提高效率
+                    step = max(1, len(audio_data) // 5000)
                     audio_data = audio_data[::step]
                     print(f"降采样后长度: {len(audio_data)}")
                 
@@ -269,14 +269,49 @@ class AudioPlayer(QWidget):
             self.audio_data = audio_data
             self.sample_rate = sample_rate
             
-            # 准备绘图数据
-            x = np.arange(len(audio_data))
+            # 准备绘图数据 - 进一步优化点数
+            # 对于超过5000个点的数据进行额外的优化：只绘制极值点和部分采样点
+            if len(audio_data) > 5000:
+                print("进行额外的绘图点数优化...")
+                
+                # 计算每个段的最大值和最小值
+                segment_size = len(audio_data) // 2500  # 将数据分为2500段
+                if segment_size < 2:
+                    segment_size = 2
+                
+                optimized_x = []
+                optimized_y = []
+                
+                for i in range(0, len(audio_data), segment_size):
+                    segment = audio_data[i:i+segment_size]
+                    if len(segment) > 0:
+                        # 只添加每段的最大值和最小值点
+                        max_idx = np.argmax(segment)
+                        min_idx = np.argmin(segment)
+                        
+                        # 添加最小值点
+                        optimized_x.append(i + min_idx)
+                        optimized_y.append(segment[min_idx])
+                        
+                        # 如果最大值与最小值不是同一个点，也添加最大值点
+                        if max_idx != min_idx:
+                            optimized_x.append(i + max_idx)
+                            optimized_y.append(segment[max_idx])
+                
+                # 使用优化后的数据
+                x = np.array(optimized_x)
+                y = np.array(optimized_y)
+                print(f"优化后的绘图点数: {len(x)}")
+            else:
+                # 点数较少时使用全部数据
+                x = np.arange(len(audio_data))
+                y = audio_data
             
             # 检查曲线对象
             print(f"更新波形图，组件ID: {id(self.waveformPlot)}, 曲线ID: {id(self.waveformCurve)}")
             
             # 更新波形图数据
-            self.waveformCurve.setData(x, audio_data)
+            self.waveformCurve.setData(x, y)
             
             # 确保波形图正确显示
             self.waveformPlot.setYRange(-1, 1)  # 重设Y轴范围
