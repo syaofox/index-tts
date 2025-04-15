@@ -186,41 +186,48 @@ class AudioPlayer(QWidget):
         
     def setupUI(self):
         main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)  # 减少边距
         
-        # 播放控制区域
+        # 创建播放控制区域
         control_layout = QHBoxLayout()
-        
-        self.playButton = QPushButton("播放")
-        self.playButton.setFixedWidth(60)
-        self.playButton.clicked.connect(self.togglePlayback)
-        self.playButton.setEnabled(False)  # 初始时禁用播放按钮
+        control_layout.setContentsMargins(4, 4, 4, 0)  # 减少边距
         
         # 音频文件路径标签
         self.pathLabel = QLabel("未选择音频")
         self.pathLabel.setWordWrap(True)
         
+        # 添加播放/暂停图标按钮
+        self.playPauseBtn = QPushButton()
+        self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+        self.playPauseBtn.setEnabled(False)  # 初始时禁用播放按钮
+        self.playPauseBtn.setFixedSize(32, 32)
+        self.playPauseBtn.clicked.connect(self.togglePlayback)
+        self.playPauseBtn.setToolTip("播放/暂停")
+        
         # 时间显示
         self.timeLabel = QLabel("00:00 / 00:00")
-        self.timeLabel.setFixedWidth(120)
+        self.timeLabel.setFixedWidth(100)
         self.timeLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        control_layout.addWidget(self.playButton)
+        # 先添加路径标签占据大部分空间，然后添加控制元素
         control_layout.addWidget(self.pathLabel, 1)  # 让标签占据剩余空间
+        control_layout.addWidget(self.playPauseBtn)
         control_layout.addWidget(self.timeLabel)
         
-        main_layout.addLayout(control_layout)
-        
-        # 进度条和波形区域
+        # 进度条
         progress_layout = QHBoxLayout()
+        progress_layout.setContentsMargins(4, 0, 4, 4)  # 减少边距
         
         # 使用自定义的可点击进度条
         self.progressSlider = ClickableSlider(Qt.Orientation.Horizontal)
         self.progressSlider.setEnabled(False)
         self.progressSlider.sliderMoved.connect(self.setPosition)
-        self.progressSlider.setFixedHeight(20)
+        self.progressSlider.setFixedHeight(16)
         
         progress_layout.addWidget(self.progressSlider)
         
+        # 添加布局
+        main_layout.addLayout(control_layout)
         main_layout.addLayout(progress_layout)
         
         # 波形图区域
@@ -262,25 +269,40 @@ class AudioPlayer(QWidget):
     
     def setAudioFile(self, file_path):
         """设置音频文件"""
-        if not file_path or not os.path.exists(file_path):
+        if not file_path:
+            return False
+        
+        # 处理file:开头的URL
+        if file_path.startswith("file:"):
+            # 从URL中提取真实路径
+            from urllib.parse import unquote
+            file_path = unquote(file_path.replace("file:///", "").replace("file://", ""))
+            
+        # 检查文件是否存在    
+        if not os.path.exists(file_path):
+            print(f"文件不存在: {file_path}")
             return False
             
         # 如果正在播放，先停止
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.mediaPlayer.stop()
+        
+        try:    
+            self.mediaPlayer.setSource(QUrl.fromLocalFile(file_path))
+            self.pathLabel.setText(os.path.basename(file_path))
+            self.playPauseBtn.setEnabled(True)  # 启用播放按钮
+            self.progressSlider.setEnabled(True)  # 启用进度条
             
-        self.mediaPlayer.setSource(QUrl.fromLocalFile(file_path))
-        self.pathLabel.setText(os.path.basename(file_path))
-        self.playButton.setEnabled(True)  # 启用播放按钮
-        self.progressSlider.setEnabled(True)  # 启用进度条
-        
-        # 加载并显示波形图
-        self.loadWaveform(file_path)
-        
-        # 设置焦点，以便直接用空格键控制
-        self.setFocus()
-        
-        return True
+            # 加载并显示波形图
+            self.loadWaveform(file_path)
+            
+            # 设置焦点，以便直接用空格键控制
+            self.setFocus()
+            
+            return True
+        except Exception as e:
+            print(f"设置音频文件出错: {str(e)}")
+            return False
     
     def loadWaveform(self, file_path):
         """加载并显示音频波形"""
@@ -309,9 +331,12 @@ class AudioPlayer(QWidget):
         self.mediaPlayer.stop()
         self.mediaPlayer.setSource(QUrl())
         self.pathLabel.setText("未选择音频")
-        self.playButton.setEnabled(False)
+        self.playPauseBtn.setEnabled(False)
         self.progressSlider.setEnabled(False)
         self.timeLabel.setText("00:00 / 00:00")
+        
+        # 恢复播放图标
+        self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         
         # 清除波形图
         if self.has_pyqtgraph:
@@ -320,23 +345,21 @@ class AudioPlayer(QWidget):
     def togglePlayback(self):
         if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self.mediaPlayer.pause()
-            self.playButton.setText("播放")
         else:
             self.mediaPlayer.play()
-            self.playButton.setText("暂停")
     
     def onPlaybackStateChanged(self, state):
         """监听播放状态变化"""
         if state == QMediaPlayer.PlaybackState.PlayingState:
-            self.playButton.setText("暂停")
+            self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
         else:
-            self.playButton.setText("播放")
+            self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
     
     def onMediaStatusChanged(self, status):
         """监听媒体状态变化"""
-        # 当播放结束时(EndOfMedia)，确保按钮显示为"播放"
+        # 当播放结束时(EndOfMedia)，确保按钮显示为播放图标
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
-            self.playButton.setText("播放")
+            self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
     
     def onPositionChanged(self, position):
         """当播放位置变化时更新进度条和时间标签"""
@@ -660,16 +683,16 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(char_widget)
         
         # 参考音频区域
-        ref_label = QLabel("参考音频:")
         self.ref_audio_player = AudioPlayer()
         
         self.select_ref_btn = QPushButton("选择参考音频")
+        self.select_ref_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
         self.select_ref_btn.clicked.connect(self.selectReferenceAudio)
         
+        # 音频控制区域
         ref_layout = QHBoxLayout()
-        ref_layout.addWidget(ref_label)
+        ref_layout.addWidget(self.select_ref_btn)  # 选择参考音频按钮放在最前面
         ref_layout.addWidget(self.ref_audio_player, 1)
-        ref_layout.addWidget(self.select_ref_btn)
         
         top_layout.addLayout(ref_layout)
         
