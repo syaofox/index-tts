@@ -701,26 +701,26 @@ class MainWindow(QMainWindow):
         self.text_edit = QTextEdit()
         self.text_edit.setAcceptRichText(False)
         self.text_edit.setPlaceholderText("在此输入要转换为语音的文本...")
+        # 设置默认最小高度为5行文本高度（大约每行20像素）
+        self.text_edit.setMinimumHeight(100)
         
         top_layout.addWidget(text_label)
         top_layout.addWidget(self.text_edit)
         
-        # 推理结果区域
-        result_label = QLabel("推理结果:")
-        self.result_audio_player = AudioPlayer()
-        
-        result_layout = QHBoxLayout()
-        result_layout.addWidget(result_label)
-        result_layout.addWidget(self.result_audio_player, 1)
-        
-        top_layout.addLayout(result_layout)
-        
-        # 推理按钮
+        # 推理按钮 - 上移到此处，紧跟文本编辑器
         self.infer_btn = QPushButton("生成语音")
         self.infer_btn.setMinimumHeight(40)
         self.infer_btn.clicked.connect(self.startInference)
         
         top_layout.addWidget(self.infer_btn)
+        
+        # 推理结果区域 - 删除标签
+        self.result_audio_player = AudioPlayer()
+        
+        result_layout = QHBoxLayout()
+        result_layout.addWidget(self.result_audio_player, 1)
+        
+        top_layout.addLayout(result_layout)
         
         # 下半部分 - 历史记录
         bottom_widget = QWidget()
