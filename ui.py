@@ -132,9 +132,16 @@ class AudioPlayer(QWidget):
         
         self.player = QMediaPlayer()
         self.audio_output = QAudioOutput()
+        self.audio_output.setVolume(0.7)  # 设置默认音量为70%
         self.player.setAudioOutput(self.audio_output)
         
+        # 连接播放状态变化信号
+        self.player.playbackStateChanged.connect(self.onPlaybackStateChanged)
+        # 连接媒体状态变化信号
+        self.player.mediaStatusChanged.connect(self.onMediaStatusChanged)
+        
         self.setupUI()
+        self.audio_file = None
         
     def setupUI(self):
         layout = QHBoxLayout(self)
@@ -142,6 +149,7 @@ class AudioPlayer(QWidget):
         self.playButton = QPushButton("播放")
         self.playButton.setFixedWidth(60)
         self.playButton.clicked.connect(self.togglePlayback)
+        self.playButton.setEnabled(False)  # 初始时禁用播放按钮
         
         # 音频文件路径标签
         self.pathLabel = QLabel("未选择音频")
@@ -154,14 +162,29 @@ class AudioPlayer(QWidget):
         
     def setAudioFile(self, file_path):
         if file_path and os.path.exists(file_path):
+            # 如果正在播放，先停止
+            if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+                self.player.stop()
+            
             self.player.setSource(QUrl.fromLocalFile(file_path))
             file_name = os.path.basename(file_path)
             self.pathLabel.setText(file_name)
             self.audio_file = file_path
+            self.playButton.setEnabled(True)  # 启用播放按钮
             return True
         else:
             self.pathLabel.setText("无效的音频文件")
+            self.audio_file = None
+            self.playButton.setEnabled(False)  # 禁用播放按钮
             return False
+    
+    def reset(self):
+        """重置播放器状态，清除音频源"""
+        self.player.stop()
+        self.player.setSource(QUrl())
+        self.audio_file = None
+        self.pathLabel.setText("未选择音频")
+        self.playButton.setEnabled(False)
     
     def togglePlayback(self):
         if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
@@ -171,11 +194,25 @@ class AudioPlayer(QWidget):
             self.player.play()
             self.playButton.setText("暂停")
     
+    def onPlaybackStateChanged(self, state):
+        """监听播放状态变化"""
+        if state == QMediaPlayer.PlaybackState.PlayingState:
+            self.playButton.setText("暂停")
+        else:
+            self.playButton.setText("播放")
+    
+    def onMediaStatusChanged(self, status):
+        """监听媒体状态变化"""
+        # 当播放结束时(EndOfMedia)，确保按钮显示为"播放"
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            self.playButton.setText("播放")
+    
     def getAudioPath(self):
-        try:
-            return self.audio_file
-        except:
-            return None
+        return self.audio_file
+    
+    def setVolume(self, volume):
+        """设置音量，取值范围0.0-1.0"""
+        self.audio_output.setVolume(volume)
 
 
 # 角色管理类
@@ -528,7 +565,10 @@ class MainWindow(QMainWindow):
         """当历史音频列表项被点击时的处理"""
         file_path = item.data(Qt.ItemDataRole.UserRole)
         if file_path:
-            self.result_audio_player.setAudioFile(file_path)
+            if not self.result_audio_player.setAudioFile(file_path):
+                QMessageBox.warning(self, "警告", f"无法加载音频文件: {os.path.basename(file_path)}")
+            else:
+                self.statusBar().showMessage(f"已加载历史音频: {os.path.basename(file_path)}", 3000)
     
     def updateCharacterComboBox(self):
         """更新角色下拉列表"""
@@ -642,7 +682,10 @@ class MainWindow(QMainWindow):
         )
         
         if file_path:
-            self.ref_audio_player.setAudioFile(file_path)
+            if not self.ref_audio_player.setAudioFile(file_path):
+                QMessageBox.warning(self, "警告", "所选文件无效或无法作为音频播放")
+            else:
+                self.statusBar().showMessage(f"已选择参考音频: {os.path.basename(file_path)}", 3000)
     
     def startInference(self):
         """开始语音生成推理"""
