@@ -44,21 +44,25 @@ class InferenceWorker(QObject):
             if not self.output_path:
                 self.output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
             
-            # 如果文本过长，分段处理
-            if len(self.text) > 500:
-                self.progress.emit("文本较长，进行分段处理...")
-                chunks = self.split_text(self.text, 500)
+            # 按空行分割文本
+            self.progress.emit("按段落分割文本...")
+            paragraphs = self.split_text_by_newlines(self.text)
+            
+            if len(paragraphs) > 1:
+                self.progress.emit(f"共分为 {len(paragraphs)} 个段落进行处理...")
                 temp_outputs = []
                 
-                for i, chunk in enumerate(chunks):
+                for i, para in enumerate(paragraphs):
+                    if not para.strip():  # 跳过空段落
+                        continue
                     temp_path = os.path.join("outputs", f"temp_{int(time.time())}_{i}.wav")
-                    self.progress.emit(f"处理第 {i+1}/{len(chunks)} 段...")
-                    self.tts.infer(self.voice_path, chunk, temp_path)
+                    self.progress.emit(f"处理第 {i+1}/{len(paragraphs)} 段...")
+                    self.tts.infer(self.voice_path, para, temp_path)
                     temp_outputs.append(temp_path)
                 
-                # 合并所有音频片段
-                self.progress.emit("合并音频片段...")
-                self.merge_audio_files(temp_outputs, self.output_path)
+                # 合并所有音频片段，并在段落间添加静音
+                self.progress.emit("合并音频片段，添加段落间静音...")
+                self.merge_audio_files_with_silence(temp_outputs, self.output_path, paragraphs)
                 
                 # 清理临时文件
                 for temp_file in temp_outputs:
@@ -75,54 +79,117 @@ class InferenceWorker(QObject):
         except Exception as e:
             self.error.emit(f"处理过程中出错: {str(e)}")
     
-    def split_text(self, text, max_length):
-        """将文本按句子分割成多个片段，每个片段不超过max_length字符"""
-        # 常见的句子结束标记
-        sentence_ends = ["。", "！", "？", "；", ".", "!", "?", ";"]
+    def split_text_by_newlines(self, text):
+        """按空行分割文本成多个段落"""
+        # 首先将文本按行分割
+        lines = text.split('\n')
+        paragraphs = []
+        current_para = []
         
-        chunks = []
-        current_chunk = ""
+        # 逐行处理
+        for line in lines:
+            if line:  # 非空行
+                current_para.append(line)
+            else:  # 空行
+                if current_para:  # 如果当前已有段落内容
+                    paragraphs.append('\n'.join(current_para))
+                    current_para = []
+                paragraphs.append('')  # 添加空段落标记，用于后续添加静音
         
-        for char in text:
-            current_chunk += char
-            
-            if char in sentence_ends and len(current_chunk) >= max_length / 2:
-                chunks.append(current_chunk)
-                current_chunk = ""
+        # 处理最后一个段落
+        if current_para:
+            paragraphs.append('\n'.join(current_para))
         
-        # 处理最后一个片段
-        if current_chunk:
-            # 如果最后一个片段很短，可以与前一个合并
-            if chunks and len(current_chunk) < max_length / 4 and len(chunks[-1]) + len(current_chunk) <= max_length:
-                chunks[-1] += current_chunk
+        # # 过滤掉连续的空段落，只保留单个
+        # filtered_paras = []
+        # for i, para in enumerate(paragraphs):
+        #     if i == 0 or (not para and not paragraphs[i-1]) or para:
+        #         filtered_paras.append(para)
+        
+        # 调试输出
+        print(f"分割后的段落数: {len(paragraphs)}")
+        for i, para in enumerate(paragraphs):
+            if para:
+                print(f"段落 {i+1}: {para[:30]}... (长度: {len(para)})")
             else:
-                chunks.append(current_chunk)
+                print(f"段落 {i+1}: [空段落]")
         
-        return chunks
+        return paragraphs
     
-    def merge_audio_files(self, input_files, output_file):
-        """合并多个音频文件成一个"""
+    def create_silence(self, duration, sample_rate):
+        """创建指定时长的静音"""
+        import torch
+        # 计算样本数
+        num_samples = int(duration * sample_rate)
+        # 创建静音波形 (通道数, 样本数)
+        silence = torch.zeros(1, num_samples)
+        return silence
+    
+    def merge_audio_files_with_silence(self, input_files, output_file, paragraphs):
+        """合并多个音频文件成一个，并在段落间添加静音"""
         import torch
         import torchaudio
+        import numpy as np
         
-        # 读取所有音频
-        waveforms = []
-        sample_rate = None
+        # 读取所有音频以获取采样率
+        if not input_files:
+            raise ValueError("没有音频文件可合并")
         
-        for file_path in input_files:
-            waveform, sr = torchaudio.load(file_path)
-            if sample_rate is None:
-                sample_rate = sr
-            elif sample_rate != sr:
-                # 如果采样率不同，进行重采样
+        # 先确定采样率
+        waveform, sample_rate = torchaudio.load(input_files[0])
+        
+        # 创建输出波形列表
+        output_waveforms = []
+        
+        # 确定非空段落的索引
+        non_empty_indices = [i for i, para in enumerate(paragraphs) if para.strip()]
+        print(f"非空段落索引: {non_empty_indices}")
+        
+        # 初始化音频文件索引
+        file_index = 0
+        
+        # 处理第一个非空段落
+        if non_empty_indices and file_index < len(input_files):
+            waveform, sr = torchaudio.load(input_files[file_index])
+            if sr != sample_rate:
                 waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
-            waveforms.append(waveform)
+            output_waveforms.append(waveform)
+            file_index += 1
+            print(f"添加音频: 段落 {non_empty_indices[0]+1}")
         
-        # 合并音频
-        merged_waveform = torch.cat(waveforms, dim=1)
+        # 处理剩余的非空段落
+        for i in range(1, len(non_empty_indices)):
+            # 计算当前非空段落和前一个非空段落之间的空段落数量
+            prev_index = non_empty_indices[i-1]
+            current_index = non_empty_indices[i]
+            empty_paragraphs_between = current_index - prev_index - 1
+            
+            # 添加静音（每个空段落0.2秒）
+            if empty_paragraphs_between > 0:
+                silence_duration = 0.2 * empty_paragraphs_between
+                silence = self.create_silence(silence_duration, sample_rate)
+                output_waveforms.append(silence)
+                print(f"添加静音: {silence_duration}秒 (段落 {prev_index+1} 和 {current_index+1} 之间)")
+            
+            # 添加当前段落的音频
+            if file_index < len(input_files):
+                waveform, sr = torchaudio.load(input_files[file_index])
+                if sr != sample_rate:
+                    waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
+                output_waveforms.append(waveform)
+                file_index += 1
+                print(f"添加音频: 段落 {current_index+1}")
+        
+        # 检查是否有波形需要合并
+        if not output_waveforms:
+            raise ValueError("没有可合并的音频片段")
+        
+        # 合并所有波形
+        merged_waveform = torch.cat(output_waveforms, dim=1)
         
         # 保存合并后的音频
         torchaudio.save(output_file, merged_waveform, sample_rate)
+        print(f"合并完成: 共 {len(output_waveforms)} 个音频片段")
 
 
 # 添加自定义可点击滑块类
