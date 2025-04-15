@@ -107,12 +107,12 @@ class InferenceWorker(QObject):
         #         filtered_paras.append(para)
         
         # 调试输出
-        print(f"分割后的段落数: {len(paragraphs)}")
-        for i, para in enumerate(paragraphs):
-            if para:
-                print(f"段落 {i+1}: {para[:30]}... (长度: {len(para)})")
-            else:
-                print(f"段落 {i+1}: [空段落]")
+        # print(f"分割后的段落数: {len(paragraphs)}")
+        # for i, para in enumerate(paragraphs):
+        #     if para:
+        #         print(f"段落 {i+1}: {para[:30]}... (长度: {len(para)})")
+        #     else:
+        #         print(f"段落 {i+1}: [空段落]")
         
         return paragraphs
     
@@ -164,9 +164,9 @@ class InferenceWorker(QObject):
             current_index = non_empty_indices[i]
             empty_paragraphs_between = current_index - prev_index - 1
             
-            # 添加静音（每个空段落0.2秒）
+            # 添加静音（每个空段落0.3秒）
             if empty_paragraphs_between > 0:
-                silence_duration = 0.2 * empty_paragraphs_between
+                silence_duration = 0.3 * empty_paragraphs_between
                 silence = self.create_silence(silence_duration, sample_rate)
                 output_waveforms.append(silence)
                 print(f"添加静音: {silence_duration}秒 (段落 {prev_index+1} 和 {current_index+1} 之间)")
