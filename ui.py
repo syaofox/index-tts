@@ -164,7 +164,7 @@ class AudioPlayer(QWidget):
         self.mediaPlayer = QMediaPlayer()
         self.audioOutput = QAudioOutput()
         self.mediaPlayer.setAudioOutput(self.audioOutput)
-        self.audioOutput.setVolume(0.7)  # 设置默认音量为70%
+        self.audioOutput.setVolume(1)  # 设置默认音量为70%
         
         # 设置焦点策略，使得组件可以接收键盘事件
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
