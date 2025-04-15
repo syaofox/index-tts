@@ -19,7 +19,7 @@ from PySide6.QtCore import Qt, QUrl, Signal, Slot, QSize, QThread, QObject
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QTextEdit, QComboBox, QFileDialog, QListWidget, 
-    QListWidgetItem, QMessageBox, QScrollArea, QSplitter
+    QListWidgetItem, QMessageBox, QScrollArea, QSplitter, QSlider, QStyle
 )
 from PySide6.QtGui import QIcon, QPixmap, QFont
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
@@ -125,26 +125,70 @@ class InferenceWorker(QObject):
         torchaudio.save(output_file, merged_waveform, sample_rate)
 
 
+# 添加自定义可点击滑块类
+class ClickableSlider(QSlider):
+    """可点击的进度条，允许用户直接点击某个位置以跳转"""
+    def __init__(self, orientation):
+        super().__init__(orientation)
+    
+    def mousePressEvent(self, event):
+        """处理鼠标点击事件，直接调整滑块位置"""
+        if self.orientation() == Qt.Orientation.Horizontal:
+            # 水平滑块，计算点击位置对应的值
+            value = QStyle.sliderValueFromPosition(
+                self.minimum(), self.maximum(),
+                event.position().x(), self.width()
+            )
+        else:
+            # 垂直滑块，计算点击位置对应的值
+            value = QStyle.sliderValueFromPosition(
+                self.minimum(), self.maximum(),
+                event.position().y(), self.height(),
+                upsideDown=True
+            )
+        
+        self.setValue(value)
+        # 发射sliderMoved信号
+        self.sliderMoved.emit(value)
+        
+        # 调用基类的鼠标事件处理
+        super().mousePressEvent(event)
+
+
 # 音频播放器控件
 class AudioPlayer(QWidget):
-    def __init__(self, parent=None):
+    """音频播放器控件"""
+    def __init__(self, label="音频播放器", parent=None):
         super().__init__(parent)
+        self.label = label
+        self.mediaPlayer = QMediaPlayer()
+        self.audioOutput = QAudioOutput()
+        self.mediaPlayer.setAudioOutput(self.audioOutput)
+        self.audioOutput.setVolume(0.7)  # 设置默认音量为70%
         
-        self.player = QMediaPlayer()
-        self.audio_output = QAudioOutput()
-        self.audio_output.setVolume(0.7)  # 设置默认音量为70%
-        self.player.setAudioOutput(self.audio_output)
+        # 设置焦点策略，使得组件可以接收键盘事件
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         
-        # 连接播放状态变化信号
-        self.player.playbackStateChanged.connect(self.onPlaybackStateChanged)
-        # 连接媒体状态变化信号
-        self.player.mediaStatusChanged.connect(self.onMediaStatusChanged)
+        # 连接媒体播放器信号
+        self.mediaPlayer.positionChanged.connect(self.onPositionChanged)
+        self.mediaPlayer.durationChanged.connect(self.onDurationChanged)
+        self.mediaPlayer.playbackStateChanged.connect(self.onPlaybackStateChanged)
+        self.mediaPlayer.mediaStatusChanged.connect(self.onMediaStatusChanged)
         
         self.setupUI()
-        self.audio_file = None
+        
+        # 波形图相关
+        self.waveformPlot = None
+        self.position_line = None
+        self.audio_data = None
+        self.sample_rate = None
+        self.duration = 0
         
     def setupUI(self):
-        layout = QHBoxLayout(self)
+        main_layout = QVBoxLayout(self)
+        
+        # 播放控制区域
+        control_layout = QHBoxLayout()
         
         self.playButton = QPushButton("播放")
         self.playButton.setFixedWidth(60)
@@ -155,43 +199,130 @@ class AudioPlayer(QWidget):
         self.pathLabel = QLabel("未选择音频")
         self.pathLabel.setWordWrap(True)
         
-        layout.addWidget(self.playButton)
-        layout.addWidget(self.pathLabel, 1)  # 让标签占据剩余空间
+        # 时间显示
+        self.timeLabel = QLabel("00:00 / 00:00")
+        self.timeLabel.setFixedWidth(120)
+        self.timeLabel.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        self.setLayout(layout)
+        control_layout.addWidget(self.playButton)
+        control_layout.addWidget(self.pathLabel, 1)  # 让标签占据剩余空间
+        control_layout.addWidget(self.timeLabel)
         
-    def setAudioFile(self, file_path):
-        if file_path and os.path.exists(file_path):
-            # 如果正在播放，先停止
-            if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-                self.player.stop()
+        main_layout.addLayout(control_layout)
+        
+        # 进度条和波形区域
+        progress_layout = QHBoxLayout()
+        
+        # 使用自定义的可点击进度条
+        self.progressSlider = ClickableSlider(Qt.Orientation.Horizontal)
+        self.progressSlider.setEnabled(False)
+        self.progressSlider.sliderMoved.connect(self.setPosition)
+        self.progressSlider.setFixedHeight(20)
+        
+        progress_layout.addWidget(self.progressSlider)
+        
+        main_layout.addLayout(progress_layout)
+        
+        # 波形图区域
+        try:
+            import pyqtgraph as pg
+            self.has_pyqtgraph = True
             
-            self.player.setSource(QUrl.fromLocalFile(file_path))
-            file_name = os.path.basename(file_path)
-            self.pathLabel.setText(file_name)
-            self.audio_file = file_path
-            self.playButton.setEnabled(True)  # 启用播放按钮
-            return True
+            # 创建波形图小部件
+            self.waveformPlot = pg.PlotWidget()
+            self.waveformPlot.setBackground('w')  # 白色背景
+            self.waveformPlot.setFixedHeight(60)
+            self.waveformPlot.setMouseEnabled(x=False, y=False)  # 禁用鼠标交互
+            self.waveformPlot.hideAxis('left')  # 隐藏Y轴
+            self.waveformPlot.hideAxis('bottom')  # 隐藏X轴
+            
+            # 初始化波形图数据
+            self.waveformCurve = self.waveformPlot.plot(pen=pg.mkPen(color=(30, 144, 255), width=1))
+            self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=(255, 0, 0), width=1))
+            self.waveformPlot.addItem(self.positionLine)
+            
+            main_layout.addWidget(self.waveformPlot)
+        except ImportError:
+            self.has_pyqtgraph = False
+            warning_label = QLabel("注意: 安装 pyqtgraph 可显示波形图")
+            warning_label.setStyleSheet("color: gray;")
+            main_layout.addWidget(warning_label)
+        
+        self.setLayout(main_layout)
+    
+    def keyPressEvent(self, event):
+        """处理键盘事件"""
+        if event.key() == Qt.Key.Key_Space:
+            # 空格键切换播放/暂停状态
+            self.togglePlayback()
+            event.accept()  # 标记事件已处理
         else:
-            self.pathLabel.setText("无效的音频文件")
-            self.audio_file = None
-            self.playButton.setEnabled(False)  # 禁用播放按钮
+            # 其他键交给父类处理
+            super().keyPressEvent(event)
+    
+    def setAudioFile(self, file_path):
+        """设置音频文件"""
+        if not file_path or not os.path.exists(file_path):
             return False
+            
+        # 如果正在播放，先停止
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.stop()
+            
+        self.mediaPlayer.setSource(QUrl.fromLocalFile(file_path))
+        self.pathLabel.setText(os.path.basename(file_path))
+        self.playButton.setEnabled(True)  # 启用播放按钮
+        self.progressSlider.setEnabled(True)  # 启用进度条
+        
+        # 加载并显示波形图
+        self.loadWaveform(file_path)
+        
+        # 设置焦点，以便直接用空格键控制
+        self.setFocus()
+        
+        return True
+    
+    def loadWaveform(self, file_path):
+        """加载并显示音频波形"""
+        try:
+            import librosa
+            import numpy as np
+            
+            # 加载音频数据（降低采样率以提高性能）
+            y, sr = librosa.load(file_path, sr=22050, mono=True)
+            
+            # 对于过长的音频，进行降采样以提高UI性能
+            if len(y) > 10000:
+                y = y[::len(y)//10000]
+            
+            # 更新波形图
+            x = np.arange(len(y))
+            self.waveformCurve.setData(x, y)
+            
+            # 重置位置线
+            self.positionLine.setValue(0)
+        except Exception as e:
+            print(f"加载波形图出错: {str(e)}")
     
     def reset(self):
         """重置播放器状态，清除音频源"""
-        self.player.stop()
-        self.player.setSource(QUrl())
-        self.audio_file = None
+        self.mediaPlayer.stop()
+        self.mediaPlayer.setSource(QUrl())
         self.pathLabel.setText("未选择音频")
         self.playButton.setEnabled(False)
+        self.progressSlider.setEnabled(False)
+        self.timeLabel.setText("00:00 / 00:00")
+        
+        # 清除波形图
+        if self.has_pyqtgraph:
+            self.waveformCurve.setData([], [])
     
     def togglePlayback(self):
-        if self.player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
-            self.player.pause()
+        if self.mediaPlayer.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.mediaPlayer.pause()
             self.playButton.setText("播放")
         else:
-            self.player.play()
+            self.mediaPlayer.play()
             self.playButton.setText("暂停")
     
     def onPlaybackStateChanged(self, state):
@@ -207,12 +338,53 @@ class AudioPlayer(QWidget):
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self.playButton.setText("播放")
     
+    def onPositionChanged(self, position):
+        """当播放位置变化时更新进度条和时间标签"""
+        # 更新进度条
+        self.progressSlider.setValue(position)
+        
+        # 更新时间标签
+        current = self.formatTime(position)
+        total = self.formatTime(self.duration)
+        self.timeLabel.setText(f"{current} / {total}")
+        
+        # 更新波形图位置线
+        if self.has_pyqtgraph and self.duration > 0:
+            # 计算当前位置对应的波形图x轴位置
+            curve_data = self.waveformCurve.getData()
+            if curve_data and len(curve_data[0]) > 0:
+                max_x = curve_data[0][-1]
+                position_ratio = position / self.duration
+                position_x = max_x * position_ratio
+                self.positionLine.setValue(position_x)
+    
+    def onDurationChanged(self, duration):
+        """当音频时长变化时更新进度条"""
+        self.duration = duration
+        self.progressSlider.setRange(0, duration)
+        
+        # 更新时间标签
+        current = self.formatTime(self.mediaPlayer.position())
+        total = self.formatTime(duration)
+        self.timeLabel.setText(f"{current} / {total}")
+    
+    def setPosition(self, position):
+        """设置播放位置（由进度条拖动触发）"""
+        self.mediaPlayer.setPosition(position)
+    
+    def formatTime(self, ms):
+        """将毫秒转换为 mm:ss 格式"""
+        s = ms // 1000
+        m = s // 60
+        s = s % 60
+        return f"{m:02d}:{s:02d}"
+    
     def getAudioPath(self):
-        return self.audio_file
+        return self.mediaPlayer.source().toString()
     
     def setVolume(self, volume):
         """设置音量，取值范围0.0-1.0"""
-        self.audio_output.setVolume(volume)
+        self.audioOutput.setVolume(volume)
 
 
 # 角色管理类

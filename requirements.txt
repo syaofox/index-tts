@@ -22,6 +22,7 @@ gradio
 tqdm
 PySide6>=6.5.0
 typing-extensions>=4.0.0
+pyqtgraph>=0.13.0
 
 WeTextProcessing; platform_machine != "Darwin"
 wetext; platform_system == "Darwin"
