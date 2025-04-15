@@ -380,7 +380,17 @@ class AudioPlayer(QWidget):
         return f"{m:02d}:{s:02d}"
     
     def getAudioPath(self):
-        return self.mediaPlayer.source().toString()
+        url_string = self.mediaPlayer.source().toString()
+        # 处理URL格式路径，移除"file:"前缀
+        if url_string.startswith("file:"):
+            # 在Windows上，URL格式可能是file:///D:/path，需要正确转换
+            from urllib.parse import unquote
+            path = unquote(url_string[5:])  # 移除"file:"前缀
+            # 确保路径格式正确
+            if path.startswith("///") and sys.platform == "win32":
+                path = path[3:]  # 在Windows上移除多余的斜杠
+            return path
+        return url_string
     
     def setVolume(self, volume):
         """设置音量，取值范围0.0-1.0"""
