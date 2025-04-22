@@ -1,4 +1,4 @@
 @echo off
-call conda activate indexTTS
+call conda activate index-tts
 python main.py
 pause 
