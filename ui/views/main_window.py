@@ -377,11 +377,12 @@ class MainWindow(QMainWindow):
             thread_running = False
             
         if thread_running:
-            print(f"推理线程正在运行: {self.inference_thread}")
-            QMessageBox.warning(self, "警告", "已有推理任务在进行中，请等待完成")
+            # 如果当前有推理任务在运行，则停止推理
+            print("推理任务正在运行，准备停止")
+            self.stopInference()
             return
         else:
-            print(f"当前无活动推理线程，可以开始新任务")
+            print("当前无活动推理线程，可以开始新任务")
             
         text = self.text_edit.toPlainText().strip()
         if not text:
@@ -406,9 +407,15 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "请输入有效的停顿时间（秒）")
             return
         
-        # 禁用推理按钮
-        self.infer_btn.setEnabled(False)
-        self.infer_btn.setText("语音生成中...")
+        # 停止所有音频播放
+        self.ref_audio_player.stop()
+        self.result_audio_player.stop()
+        
+        # 禁用所有按钮，除了合成按钮（现在是停止按钮）
+        self.disableUIControls(True)
+        
+        # 将合成按钮变成停止按钮
+        self.infer_btn.setText("停止生成")
         self.statusBar().showMessage("正在生成语音...")
         
         # 创建输出路径
@@ -439,13 +446,49 @@ class MainWindow(QMainWindow):
         self.inference_thread.start()
         print(f"推理线程已启动: {self.inference_thread}")
     
+    def stopInference(self):
+        """停止当前正在进行的推理任务"""
+        if self.inference_worker is not None:
+            # 发送停止请求
+            self.inference_worker.stop()
+            self.statusBar().showMessage("正在停止语音生成...")
+    
+    def disableUIControls(self, disable=True):
+        """禁用或启用UI控件"""
+        # 禁用/启用角色选择区域按钮
+        self.char_combo.setEnabled(not disable)
+        self.load_char_btn.setEnabled(not disable)
+        self.save_char_btn.setEnabled(not disable)
+        self.delete_char_btn.setEnabled(not disable)
+        self.export_char_btn.setEnabled(not disable)
+        self.import_char_btn.setEnabled(not disable)
+        
+        # 禁用/启用参考音频区域
+        self.select_ref_btn.setEnabled(not disable)
+        self.ref_audio_player.setEnabled(not disable)
+        
+        # 禁用/启用文本编辑区域
+        self.text_edit.setEnabled(not disable)
+        self.punct_edit.setEnabled(not disable)
+        self.pause_edit.setEnabled(not disable)
+        
+        # 禁用/启用历史列表
+        self.history_list.setEnabled(not disable)
+        
+        # 结果音频播放器
+        self.result_audio_player.setEnabled(not disable)
+        
+        # 注意：不禁用推理按钮，它用作停止按钮
+    
     def onInferenceFinished(self, output_path):
         """推理完成时的处理"""
         print(f"推理完成，输出路径: {output_path}")
         # 更新界面
-        self.infer_btn.setEnabled(True)
         self.infer_btn.setText("生成语音")
         self.statusBar().showMessage("语音生成完成", 5000)
+        
+        # 启用所有按钮
+        self.disableUIControls(False)
         
         # 播放生成的音频
         self.result_audio_player.setAudioFile(output_path)
@@ -464,11 +507,17 @@ class MainWindow(QMainWindow):
     def onInferenceError(self, error_message):
         """处理推理错误"""
         print(f"推理出错: {error_message}")
-        self.infer_btn.setEnabled(True)
         self.infer_btn.setText("生成语音")
         self.statusBar().showMessage("生成失败", 5000)
         
-        QMessageBox.critical(self, "错误", error_message)
+        # 启用所有按钮
+        self.disableUIControls(False)
+        
+        # 如果不是用户主动中断，则显示错误消息
+        if error_message != "推理已被用户中断":
+            QMessageBox.critical(self, "错误", error_message)
+        else:
+            self.statusBar().showMessage("用户已中断语音生成", 5000)
         
         # 安全重置线程状态
         print(f"推理出错，开始重置线程状态...")

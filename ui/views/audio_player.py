@@ -374,6 +374,11 @@ class AudioPlayer(QWidget):
         else:
             self.mediaPlayer.play()
     
+    def stop(self):
+        """停止音频播放"""
+        if self.mediaPlayer.playbackState() != QMediaPlayer.PlaybackState.StoppedState:
+            self.mediaPlayer.stop()
+    
     def onPlaybackStateChanged(self, state):
         """监听播放状态变化"""
         if state == QMediaPlayer.PlaybackState.PlayingState:

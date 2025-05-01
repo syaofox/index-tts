@@ -35,6 +35,7 @@ class InferenceWorker(QObject):
         self.punct_chars = punct_chars    # 分割标点符号
         self.pause_time = pause_time      # 段落间停顿时间（秒）
         self.replace_rules = []           # 文本替换规则列表
+        self._stop_requested = False      # 停止标志
         
         # 检查配置文件并加载（如果需要）
         self.check_and_load_config()
@@ -100,6 +101,11 @@ class InferenceWorker(QObject):
         
         return result_text
 
+    def stop(self):
+        """请求停止推理过程"""
+        self._stop_requested = True
+        self.progress.emit("正在停止推理过程...")
+
     def run(self):
         try:
             if not self.output_path:
@@ -111,6 +117,11 @@ class InferenceWorker(QObject):
 
             print(preprocessed_segments)
             
+            # 检查是否请求停止
+            if self._stop_requested:
+                self.error.emit("推理已被用户中断")
+                return
+            
             if len(preprocessed_segments) > 1:
                 self.progress.emit(f"共分为 {len(preprocessed_segments)} 个片段进行处理...")
                 temp_outputs = []
@@ -118,6 +129,17 @@ class InferenceWorker(QObject):
                 
                 segment_index = 0
                 for i, segment in enumerate(preprocessed_segments):
+                    # 检查是否请求停止
+                    if self._stop_requested:
+                        # 清理已生成的临时文件
+                        for _, temp_file in temp_outputs:
+                            try:
+                                os.remove(temp_file)
+                            except:
+                                pass
+                        self.error.emit("推理已被用户中断")
+                        return
+                    
                     if segment == self.BR_TAG:  # 处理<br>标记
                         silence_positions.append(i)
                         continue
@@ -131,6 +153,17 @@ class InferenceWorker(QObject):
                     temp_outputs.append((i, temp_path))  # 保存原始索引位置和文件路径
                     segment_index += 1
                 
+                # 检查是否请求停止
+                if self._stop_requested:
+                    # 清理临时文件
+                    for _, temp_file in temp_outputs:
+                        try:
+                            os.remove(temp_file)
+                        except:
+                            pass
+                    self.error.emit("推理已被用户中断")
+                    return
+                
                 # 合并所有音频片段，包括<br>标记处的静音
                 self.progress.emit(f"合并音频片段，添加段落间静音 ({self.pause_time}秒)...")
                 self.merge_audio_files_with_br(temp_outputs, silence_positions, preprocessed_segments, self.output_path)
@@ -142,6 +175,11 @@ class InferenceWorker(QObject):
                     except:
                         pass
             else:
+                # 检查是否请求停止
+                if self._stop_requested:
+                    self.error.emit("推理已被用户中断")
+                    return
+                
                 self.progress.emit("开始语音生成...")
                 # 如果只有一个片段且不是<br>标记，直接处理
                 if preprocessed_segments and preprocessed_segments[0] != self.BR_TAG:
@@ -151,6 +189,17 @@ class InferenceWorker(QObject):
                     import torchaudio
                     silence = self.create_silence(self.pause_time, 44100)  # 使用默认采样率
                     torchaudio.save(self.output_path, silence, 44100)
+            
+            # 最后检查一次是否请求停止
+            if self._stop_requested:
+                # 尝试删除输出文件，因为它可能是不完整的
+                try:
+                    if os.path.exists(self.output_path):
+                        os.remove(self.output_path)
+                except:
+                    pass
+                self.error.emit("推理已被用户中断")
+                return
             
             self.progress.emit("语音生成完成！")
             self.finished.emit(self.output_path)
