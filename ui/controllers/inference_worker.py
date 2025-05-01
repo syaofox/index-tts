@@ -72,7 +72,7 @@ class InferenceWorker(QObject):
                     if not line or line.startswith('#'):
                         continue
                     
-                    parts = line.split(' ', 2)  # 最多分割成3部分
+                    parts = line.split('|')  # 使用竖线分隔
                     if len(parts) == 3:
                         search_str, replace_from, replace_to = parts
                         self.replace_rules.append((search_str, replace_from, replace_to))
