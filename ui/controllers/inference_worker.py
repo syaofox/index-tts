@@ -18,6 +18,8 @@ class InferenceWorker(QObject):
     
     # 特殊标记
     BR_TAG = "<br>"  # 空行标记
+    # 固定的配置文件路径
+    REPLACE_CONFIG_PATH = "ui/text_replace_config.txt"
 
     def __init__(self, tts, voice_path, text, output_path=None, 
                  punct_chars="。？！", pause_time=0.3):
@@ -28,6 +30,51 @@ class InferenceWorker(QObject):
         self.output_path = output_path
         self.punct_chars = punct_chars    # 分割标点符号
         self.pause_time = pause_time      # 段落间停顿时间（秒）
+        self.replace_rules = []           # 文本替换规则列表
+        
+        # 加载固定位置的替换规则配置
+        if os.path.exists(self.REPLACE_CONFIG_PATH):
+            self.load_text_replace_config()
+
+    def load_text_replace_config(self):
+        """加载文本替换配置文件"""
+        try:
+            self.replace_rules = []
+            with open(self.REPLACE_CONFIG_PATH, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    # 跳过空行和注释行
+                    if not line or line.startswith('#'):
+                        continue
+                    
+                    parts = line.split(' ', 2)  # 最多分割成3部分
+                    if len(parts) == 3:
+                        search_str, replace_from, replace_to = parts
+                        self.replace_rules.append((search_str, replace_from, replace_to))
+                    else:
+                        print(f"警告：配置行格式不正确，已跳过: {line}")
+            
+            if self.replace_rules:
+                print(f"已加载 {len(self.replace_rules)} 条文本替换规则")
+        except Exception as e:
+            print(f"加载文本替换配置文件出错: {str(e)}")
+            self.error.emit(f"加载文本替换配置文件出错: {str(e)}")
+
+    def replace_text_by_config(self, text):
+        """根据配置规则替换文本"""
+        if not self.replace_rules:
+            return text
+            
+        result_text = text
+        for search_str, replace_from, replace_to in self.replace_rules:
+            # 在搜索字符串中查找需要修改的部分并替换
+            if search_str in result_text:
+                # 创建一个新字符串，将搜索字符串中的替换源替换为替换目标
+                modified_search_str = search_str.replace(replace_from, replace_to)
+                # 替换原文本中的搜索字符串为修改后的字符串
+                result_text = result_text.replace(search_str, modified_search_str)
+        
+        return result_text
 
     def run(self):
         try:
@@ -89,10 +136,16 @@ class InferenceWorker(QObject):
     def preprocess_text(self, text):
         """
         文本预处理，包括：
-        1. 按段落分割
-        2. 将空行替换为<br>标记
-        3. 对非<br>段落按标点符号分割
+        1. 应用文本替换规则（如果有）
+        2. 按段落分割
+        3. 将空行替换为<br>标记
+        4. 对非<br>段落按标点符号分割
         """
+        # 应用文本替换规则
+        if self.replace_rules:
+            self.progress.emit("应用文本替换规则...")
+            text = self.replace_text_by_config(text)
+        
         self.progress.emit("分割段落并处理空行...")
         paragraphs = self.split_text_by_newlines_with_br(text)
         
