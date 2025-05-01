@@ -20,13 +20,12 @@ class InferenceWorker(QObject):
     BR_TAG = "<br>"  # 空行标记
 
     def __init__(self, tts, voice_path, text, output_path=None, 
-                 split_method="paragraph", punct_chars="。？！", pause_time=0.3):
+                 punct_chars="。？！", pause_time=0.3):
         super().__init__()
         self.tts = tts
         self.voice_path = voice_path
         self.text = text
         self.output_path = output_path
-        self.split_method = split_method  # "paragraph" 或 "punctuation"
         self.punct_chars = punct_chars    # 分割标点符号
         self.pause_time = pause_time      # 段落间停顿时间（秒）
 

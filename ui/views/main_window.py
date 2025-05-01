@@ -134,11 +134,6 @@ class MainWindow(QMainWindow):
         text_split_widget = QWidget()
         text_split_layout = QHBoxLayout(text_split_widget)
         
-        # 标点分隔设置改为复选框
-        self.split_checkbox = QCheckBox("启用标点分割")
-        
-        text_split_layout.addWidget(self.split_checkbox)
-        
         # 标点符号设置
         punct_label = QLabel("分割标点:")
         self.punct_edit = QTextEdit()
@@ -160,13 +155,7 @@ class MainWindow(QMainWindow):
         text_split_layout.addWidget(self.pause_edit)
         text_split_layout.addStretch(1)
         
-        # 启用/禁用标点设置的联动
-        self.split_checkbox.stateChanged.connect(self.onSplitMethodChanged)
-        
         top_layout.addWidget(text_split_widget)
-        
-        # 初始化时设置标点编辑框的状态
-        self.onSplitMethodChanged()
         
         # 推理按钮 - 上移到此处，紧跟文本编辑器
         self.infer_btn = QPushButton("生成语音")
@@ -343,7 +332,7 @@ class MainWindow(QMainWindow):
     def selectReferenceAudio(self):
         """选择参考音频文件"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "选择参考音频文件", "", "音频文件 (*.wav *.mp3 *.flac *.ogg)"
+            self, "选择参考音频", "", "音频文件 (*.wav *.mp3 *.flac *.ogg *.aac)"
         )
         
         if file_path:
@@ -352,18 +341,6 @@ class MainWindow(QMainWindow):
             else:
                 self.statusBar().showMessage(f"已选择参考音频: {os.path.basename(file_path)}", 3000)
     
-    def onSplitMethodChanged(self, state=None):
-        """处理分割方法改变"""
-        # 如果state是None，则获取当前选中状态
-        if state is None:
-            state = self.split_checkbox.isChecked()
-            
-        split_method = "punctuation" if state else "paragraph"
-        # 启用或禁用标点设置
-        is_punct_enabled = split_method == "punctuation"
-        # 启用/禁用标点输入
-        self.punct_edit.setEnabled(is_punct_enabled)
-
     def startInference(self):
         """开始推理处理"""
         print("开始推理过程...")
@@ -397,9 +374,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "请先选择参考音频")
             return
         
-        # 获取分割方式和参数
-        split_method = "punctuation" if self.split_checkbox.isChecked() else "paragraph"
-        punct_chars = self.punct_edit.toPlainText() if split_method == "punctuation" else ""
+        # 获取标点符号和停顿时间
+        punct_chars = self.punct_edit.toPlainText()
         
         # 获取停顿时间并验证
         try:
@@ -425,7 +401,6 @@ class MainWindow(QMainWindow):
             voice_path, 
             text,
             output_path=output_path,
-            split_method=split_method,
             punct_chars=punct_chars,
             pause_time=pause_time
         )
