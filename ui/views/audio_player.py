@@ -25,6 +25,8 @@ class AudioPlayer(QWidget):
     """音频播放器控件"""
     line_width = 1
     pen_line_width = 0.8
+    bar_width = 1  # 柱状图宽度
+
 
     def __init__(self, label="音频播放器", parent=None, waveform_height=40, 
                  background_color='w', foreground_color='k', 
@@ -49,7 +51,10 @@ class AudioPlayer(QWidget):
         self.has_pyqtgraph = True
         self.waveformPlot = None
         self.waveformCurve = None
+        self.waveformBarsPositive = None  # 正值柱状图
+        self.waveformBarsNegative = None  # 负值柱状图
         self.positionLine = None
+        self.centerLine = None  # 中轴线
         self.audio_data = None
         self.sample_rate = None
         self.duration = 0
@@ -112,10 +117,20 @@ class AudioPlayer(QWidget):
         self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
         self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
         
-        # 初始化波形图数据 - 使用设定的波形颜色，减小线宽使连线更细
-        self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, line_width=self.line_width))
+        # 初始化柱状图数据
+        # 创建柱状图对象 - 正值和负值分别使用不同的柱状图
+        self.waveformBarsPositive = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.waveform_color, pen=None)
+        self.waveformBarsNegative = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.waveform_color, pen=None)
+        self.waveformPlot.addItem(self.waveformBarsPositive)
+        self.waveformPlot.addItem(self.waveformBarsNegative)
+        
+        # 添加位置线
         self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, line_width=self.pen_line_width))
         self.waveformPlot.addItem(self.positionLine)
+        
+        # 添加0中轴线 - 水平细线
+        self.centerLine = pg.InfiniteLine(pos=0, angle=0, pen=pg.mkPen(color=(200, 200, 200), width=0.5))
+        self.waveformPlot.addItem(self.centerLine)
         
         # 添加波形图点击事件处理
         self.waveformPlot.scene().sigMouseClicked.connect(self.onWaveformClicked)
@@ -129,7 +144,7 @@ class AudioPlayer(QWidget):
     
     def onWaveformClicked(self, event):
         """处理波形图点击事件，跳转到对应位置"""
-        if self.waveformCurve is None or self.duration <= 0:
+        if (self.waveformBarsPositive is None and self.waveformBarsNegative is None) or self.duration <= 0:
             return
             
         try:
@@ -138,21 +153,20 @@ class AudioPlayer(QWidget):
             x_pos = pos.x()
             
             # 获取波形图的x轴范围
-            curve_data = self.waveformCurve.getData()
-            if curve_data and len(curve_data[0]) > 0:
-                max_x = curve_data[0][-1]
-                
-                # 确保位置在有效范围内
-                x_pos = max(0, min(x_pos, max_x))
-                
-                # 计算对应的音频位置（毫秒）
-                position_ratio = x_pos / max_x
-                position_ms = int(position_ratio * self.duration)
-                
-                # 设置播放位置
-                self.mediaPlayer.setPosition(position_ms)
-                
-                print(f"波形图点击位置: {x_pos}, 对应音频位置: {position_ms}ms")
+            x_range = self.waveformPlot.getViewBox().viewRange()[0]
+            max_x = x_range[1]
+            
+            # 确保位置在有效范围内
+            x_pos = max(0, min(x_pos, max_x))
+            
+            # 计算对应的音频位置（毫秒）
+            position_ratio = x_pos / max_x
+            position_ms = int(position_ratio * self.duration)
+            
+            # 设置播放位置
+            self.mediaPlayer.setPosition(position_ms)
+            
+            print(f"波形图点击位置: {x_pos}, 对应音频位置: {position_ms}ms")
         except Exception as e:
             print(f"处理波形图点击事件出错: {str(e)}")
             traceback.print_exc()
@@ -204,8 +218,8 @@ class AudioPlayer(QWidget):
             return False
     
     def loadWaveform(self, file_path):
-        """加载并显示音频波形"""
-        if self.waveformPlot is None or self.waveformCurve is None:
+        """加载并显示音频波形（柱状图形式）"""
+        if self.waveformPlot is None or self.waveformBarsPositive is None or self.waveformBarsNegative is None:
             print("波形图组件未初始化")
             return False
             
@@ -225,9 +239,9 @@ class AudioPlayer(QWidget):
             print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
             
             # 处理过长的音频，降采样以提高UI性能
-            if len(audio_data) > 1000:
-                # 限制最大点数为1000，大幅提高渲染性能
-                step = max(1, len(audio_data) // 1000)
+            if len(audio_data) > 500:
+                # 限制最大点数为500，大幅提高渲染性能
+                step = max(1, len(audio_data) // 500)
                 audio_data = audio_data[::step]
                 print(f"降采样后长度: {len(audio_data)}")
             
@@ -236,57 +250,33 @@ class AudioPlayer(QWidget):
             if max_val > 0:
                 audio_data = audio_data / max_val
             
-
             # 保存音频数据和采样率
             self.audio_data = audio_data
             self.sample_rate = sample_rate
             
-            # 准备绘图数据 - 进一步优化点数
-            # 对于超过1000个点的数据进行额外的优化：只绘制极值点和部分采样点
-            if len(audio_data) > 1000:
-                print("进行额外的绘图点数优化...")
-                
-                # 计算每个段的最大值和最小值
-                segment_size = len(audio_data) // 500  # 将数据分为500段
-                if segment_size < 2:
-                    segment_size = 2
-                
-                optimized_x = []
-                optimized_y = []
-                
-                for i in range(0, len(audio_data), segment_size):
-                    segment = audio_data[i:i+segment_size]
-                    if len(segment) > 0:
-                        # 只添加每段的最大值和最小值点
-                        max_idx = np.argmax(segment)
-                        min_idx = np.argmin(segment)
-                        
-                        # 添加最小值点
-                        optimized_x.append(i + min_idx)
-                        optimized_y.append(segment[min_idx])
-                        
-                        # 如果最大值与最小值不是同一个点，也添加最大值点
-                        if max_idx != min_idx:
-                            optimized_x.append(i + max_idx)
-                            optimized_y.append(segment[max_idx])
-                
-                # 使用优化后的数据
-                x = np.array(optimized_x)
-                y = np.array(optimized_y)
-                print(f"优化后的绘图点数: {len(x)}")
-            else:
-                # 点数较少时使用全部数据
-                x = np.arange(len(audio_data))
-                y = audio_data
+            # 创建x轴数据
+            x = np.arange(len(audio_data))
             
-            # 检查曲线对象
-            print(f"更新波形图，组件ID: {id(self.waveformPlot)}, 曲线ID: {id(self.waveformCurve)}")
+            # 准备柱状图数据
+            # 分离正值和负值
+            positive_mask = audio_data >= 0
+            negative_mask = audio_data < 0
             
-            # 更新波形图数据
-            self.waveformCurve.setData(x, y)
+            # 正值柱状图数据
+            x_positive = x[positive_mask]
+            height_positive = audio_data[positive_mask]
+            
+            # 负值柱状图数据（负值会向下显示）
+            x_negative = x[negative_mask]
+            height_negative = audio_data[negative_mask]  # 保持负值
+            
+            # 更新柱状图数据
+            self.waveformBarsPositive.setOpts(x=x_positive, height=height_positive, width=self.bar_width, pen=None)
+            self.waveformBarsNegative.setOpts(x=x_negative, height=height_negative, width=self.bar_width, pen=None)
             
             # 确保波形图正确显示
             self.waveformPlot.setYRange(-1, 1)  # 重设Y轴范围
+            self.waveformPlot.setXRange(0, len(audio_data))  # 设置X轴范围
             
             # 强制更新
             self.waveformPlot.update()  # 强制更新绘图
@@ -317,12 +307,14 @@ class AudioPlayer(QWidget):
         self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         
         # 清除波形图
-        if self.waveformCurve is not None:
+        if self.waveformBarsPositive is not None and self.waveformBarsNegative is not None:
             try:
-                # 清除波形数据
-                self.waveformCurve.setData([], [])
+                # 清除柱状图数据
+                self.waveformBarsPositive.setOpts(x=[], height=[])
+                self.waveformBarsNegative.setOpts(x=[], height=[])
                 if self.positionLine is not None:
                     self.positionLine.setValue(0)
+                # 中轴线不需要重置，它始终在y=0位置
                 # 清除保存的音频数据
                 self.audio_data = None
                 self.sample_rate = None
@@ -361,14 +353,12 @@ class AudioPlayer(QWidget):
         self.timeLabel.setText(f"{current} / {total}")
         
         # 更新波形图位置线
-        if self.waveformCurve is not None and self.duration > 0:
+        if self.audio_data is not None and self.duration > 0:
             try:
                 # 计算当前位置对应的波形图x轴位置
-                curve_data = self.waveformCurve.getData()
-                if curve_data and len(curve_data[0]) > 0:
-                    max_x = curve_data[0][-1]
+                if len(self.audio_data) > 0:
                     position_ratio = position / self.duration
-                    position_x = max_x * position_ratio
+                    position_x = len(self.audio_data) * position_ratio
                     if self.positionLine is not None:
                         self.positionLine.setValue(position_x)
             except Exception as e:
