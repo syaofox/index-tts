@@ -19,7 +19,7 @@ class MultiRoleInferenceWorker(InferenceBase):
     """多角色推理工作线程类"""
     
     def __init__(self, tts, character_manager, role_text_pairs, 
-                 output_path=None, punct_chars="。？！", pause_time=0.3):
+                 output_path=None, punct_chars="。？！", pause_time=0.3, replace_rules=None):
         """
         初始化多角色推理工作器
         
@@ -30,10 +30,12 @@ class MultiRoleInferenceWorker(InferenceBase):
             output_path: 输出音频文件路径，如果为None则自动生成
             punct_chars: 分割文本的标点符号
             pause_time: 段落间停顿时间(秒)
+            replace_rules: 文本替换规则列表，格式为[(search_str, replace_from, replace_to), ...]
         """
         super().__init__(tts, output_path, punct_chars, pause_time)
         self.character_manager = character_manager
         self.role_text_pairs = role_text_pairs
+        self.replace_rules = replace_rules or []
         
         # 创建唯一的临时目录
         self.temp_dir = os.path.join("outputs", "temp", str(uuid.uuid4()))
@@ -177,7 +179,8 @@ class MultiRoleInferenceWorker(InferenceBase):
                 text,
                 output_path=role_output_path,
                 punct_chars=self.punct_chars,
-                pause_time=self.pause_time
+                pause_time=self.pause_time,
+                replace_rules=self.replace_rules  # 传递替换规则
             )
             
             # 连接进度信号，添加角色名前缀

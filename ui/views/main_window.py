@@ -705,6 +705,9 @@ class MainWindow(QMainWindow):
         self.ref_audio_player.stop()
         self.result_audio_player.stop()
         
+        # 加载文本替换规则
+        replace_rules = self.loadReplacementRules()
+        
         # 单角色推理 - 原始流程
         if len(role_text_pairs) == 1 and role_text_pairs[0][0] is None:
             # 获取参考音频路径
@@ -738,7 +741,8 @@ class MainWindow(QMainWindow):
                 text,
                 output_path=output_path,
                 punct_chars=punct_chars,
-                pause_time=pause_time
+                pause_time=pause_time,
+                replace_rules=replace_rules  # 添加替换规则参数
             )
             
             # 连接信号
@@ -788,6 +792,9 @@ class MainWindow(QMainWindow):
                                f"以下角色不存在: {missing_roles_str}\n请先创建这些角色或检查角色名称拼写。")
             return
         
+        # 加载文本替换规则
+        replace_rules = self.loadReplacementRules()
+        
         # 生成输出文件名
         first_role = role_text_pairs[0][0]
         combined_name = f"{first_role}"
@@ -806,7 +813,8 @@ class MainWindow(QMainWindow):
             role_text_pairs,
             output_path=output_path,
             punct_chars=punct_chars,
-            pause_time=pause_time
+            pause_time=pause_time,
+            replace_rules=replace_rules  # 添加替换规则参数
         )
         
         # 连接信号
@@ -1013,4 +1021,28 @@ class MainWindow(QMainWindow):
         # 重置引用
         self.inference_thread = None
         self.inference_worker = None
-        print("线程状态已安全重置") 
+        print("线程状态已安全重置")
+    
+    def loadReplacementRules(self):
+        """加载文本替换规则"""
+        replace_rules = []
+        
+        try:
+            if os.path.exists(self.replace_config_path):
+                with open(self.replace_config_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith('#'):
+                            continue
+                        parts = line.split('|')
+                        if len(parts) == 3:
+                            search_str, replace_from, replace_to = parts
+                            replace_rules.append((search_str, replace_from, replace_to))
+                
+                print(f"已加载 {len(replace_rules)} 条文本替换规则")
+            else:
+                print("替换规则配置文件不存在或为空")
+        except Exception as e:
+            print(f"加载替换规则出错: {str(e)}")
+        
+        return replace_rules 
