@@ -23,6 +23,9 @@ import librosa
 
 class AudioPlayer(QWidget):
     """音频播放器控件"""
+    line_width = 1
+    pen_line_width = 0.8
+
     def __init__(self, label="音频播放器", parent=None, waveform_height=40, 
                  background_color='w', foreground_color='k', 
                  waveform_color=(200, 200, 200), position_line_color='red'):
@@ -110,8 +113,8 @@ class AudioPlayer(QWidget):
         self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
         
         # 初始化波形图数据 - 使用设定的波形颜色，减小线宽使连线更细
-        self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, width=0.8))
-        self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, width=1.5))
+        self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, line_width=self.line_width))
+        self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, line_width=self.pen_line_width))
         self.waveformPlot.addItem(self.positionLine)
         
         # 添加波形图点击事件处理
@@ -482,48 +485,4 @@ class AudioPlayer(QWidget):
             traceback.print_exc()
             return False
     
-    def setWaveformColor(self, color):
-        """设置波形线条颜色
-        
-        Args:
-            color: 颜色值，可以是名称字符串(如'blue')、RGB元组(如(0,0,255))或十六进制字符串(如'#0000FF')
-            
-        Returns:
-            bool: 设置是否成功
-        """
-        if self.waveformCurve is None:
-            print("波形图不可用，无法设置波形颜色")
-            return False
-            
-        try:
-            self.waveform_color = color
-            self.waveformCurve.setPen(pg.mkPen(color=color, width=0.8))
-            print(f"波形线条颜色已设为 {color}")
-            return True
-        except Exception as e:
-            print(f"设置波形线条颜色出错: {str(e)}")
-            traceback.print_exc()
-            return False
-    
-    def setPositionLineColor(self, color):
-        """设置位置指示线颜色
-        
-        Args:
-            color: 颜色值，可以是名称字符串(如'red')、RGB元组(如(255,0,0))或十六进制字符串(如'#FF0000')
-            
-        Returns:
-            bool: 设置是否成功
-        """
-        if self.positionLine is None:
-            print("波形图不可用，无法设置位置线颜色")
-            return False
-            
-        try:
-            self.position_line_color = color
-            self.positionLine.setPen(pg.mkPen(color=color, width=1.5))
-            print(f"位置指示线颜色已设为 {color}")
-            return True
-        except Exception as e:
-            print(f"设置位置指示线颜色出错: {str(e)}")
-            traceback.print_exc()
-            return False 
+   
