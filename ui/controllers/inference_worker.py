@@ -20,6 +20,10 @@ class InferenceWorker(QObject):
     BR_TAG = "<br>"  # 空行标记
     # 固定的配置文件路径
     REPLACE_CONFIG_PATH = "ui/text_replace_config.txt"
+    
+    # 类级别的配置缓存
+    _replace_rules_cache = []  # 缓存的替换规则
+    _config_last_modified = 0  # 配置文件最后修改时间
 
     def __init__(self, tts, voice_path, text, output_path=None, 
                  punct_chars="。？！", pause_time=0.3):
@@ -32,9 +36,29 @@ class InferenceWorker(QObject):
         self.pause_time = pause_time      # 段落间停顿时间（秒）
         self.replace_rules = []           # 文本替换规则列表
         
-        # 加载固定位置的替换规则配置
-        if os.path.exists(self.REPLACE_CONFIG_PATH):
+        # 检查配置文件并加载（如果需要）
+        self.check_and_load_config()
+
+    def check_and_load_config(self):
+        """检查配置文件是否存在并且需要重新加载"""
+        if not os.path.exists(self.REPLACE_CONFIG_PATH):
+            self.replace_rules = []
+            return
+            
+        # 获取文件最后修改时间
+        current_mtime = os.path.getmtime(self.REPLACE_CONFIG_PATH)
+        
+        # 检查是否需要重新加载
+        if current_mtime > InferenceWorker._config_last_modified or not InferenceWorker._replace_rules_cache:
             self.load_text_replace_config()
+            # 更新类级别的缓存
+            InferenceWorker._replace_rules_cache = self.replace_rules.copy()
+            InferenceWorker._config_last_modified = current_mtime
+            print(f"配置文件已更新，重新加载 {len(self.replace_rules)} 条规则")
+        else:
+            # 使用缓存的规则
+            self.replace_rules = InferenceWorker._replace_rules_cache.copy()
+            print(f"使用缓存的 {len(self.replace_rules)} 条替换规则")
 
     def load_text_replace_config(self):
         """加载文本替换配置文件"""
