@@ -5,12 +5,20 @@
 import os
 import sys
 import traceback
+from urllib.parse import unquote
 
 from PySide6.QtCore import Qt, QUrl
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QStyle
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
+
+# 波形图相关库
+import pyqtgraph as pg
+import numpy as np
+import torchaudio
+import torch
+import librosa
 
 
 class AudioPlayer(QWidget):
@@ -35,7 +43,7 @@ class AudioPlayer(QWidget):
         self.mediaPlayer.mediaStatusChanged.connect(self.onMediaStatusChanged)
         
         # 波形图相关 - 移到setupUI前初始化
-        self.has_pyqtgraph = False
+        self.has_pyqtgraph = True
         self.waveformPlot = None
         self.waveformCurve = None
         self.positionLine = None
@@ -87,57 +95,38 @@ class AudioPlayer(QWidget):
         main_layout.addLayout(control_layout)
         
         # 波形图区域
-        try:
-            # 尝试导入并初始化波形图
-            import pyqtgraph as pg
-            # 设置背景为设定颜色
-            pg.setConfigOption('background', self.background_color)
-            # 设置前景为设定颜色
-            pg.setConfigOption('foreground', self.foreground_color)
-            
-            # 创建波形图小部件
-            self.waveformPlot = pg.PlotWidget(background=self.background_color)  # 使用设定的背景色
-            self.waveformPlot.setFixedHeight(self.waveform_height)  # 使用设置的高度值
-            self.waveformPlot.setMouseEnabled(x=True, y=False)  # 启用X轴方向的鼠标交互
-            self.waveformPlot.hideAxis('left')  # 隐藏Y轴
-            self.waveformPlot.hideAxis('bottom')  # 隐藏X轴
-            self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
-            self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
-            
-            # 初始化波形图数据 - 使用设定的波形颜色
-            self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, width=1.5))
-            self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, width=1.5))
-            self.waveformPlot.addItem(self.positionLine)
-            
-            # 添加波形图点击事件处理
-            self.waveformPlot.scene().sigMouseClicked.connect(self.onWaveformClicked)
-            
-            # 添加到主布局
-            main_layout.addWidget(self.waveformPlot)
-            
-            # 标记pyqtgraph可用
-            self.has_pyqtgraph = True
-            
-            print(f"波形图组件初始化成功, 组件ID: {id(self.waveformPlot)}")
-        except ImportError as e:
-            self.has_pyqtgraph = False
-            warning_label = QLabel("注意: 安装 pyqtgraph 和 librosa 可显示波形图")
-            warning_label.setStyleSheet("color: gray;")
-            main_layout.addWidget(warning_label)
-            print(f"无法导入pyqtgraph: {e}")
-        except Exception as e:
-            self.has_pyqtgraph = False
-            warning_label = QLabel(f"波形图初始化失败: {str(e)}")
-            warning_label.setStyleSheet("color: red;")
-            main_layout.addWidget(warning_label)
-            print(f"波形图初始化出错: {str(e)}")
-            traceback.print_exc()
+        # 设置背景为设定颜色
+        pg.setConfigOption('background', self.background_color)
+        # 设置前景为设定颜色
+        pg.setConfigOption('foreground', self.foreground_color)
+        
+        # 创建波形图小部件
+        self.waveformPlot = pg.PlotWidget(background=self.background_color)  # 使用设定的背景色
+        self.waveformPlot.setFixedHeight(self.waveform_height)  # 使用设置的高度值
+        self.waveformPlot.setMouseEnabled(x=True, y=False)  # 启用X轴方向的鼠标交互
+        self.waveformPlot.hideAxis('left')  # 隐藏Y轴
+        self.waveformPlot.hideAxis('bottom')  # 隐藏X轴
+        self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
+        self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
+        
+        # 初始化波形图数据 - 使用设定的波形颜色，减小线宽使连线更细
+        self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, width=0.8))
+        self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, width=1.5))
+        self.waveformPlot.addItem(self.positionLine)
+        
+        # 添加波形图点击事件处理
+        self.waveformPlot.scene().sigMouseClicked.connect(self.onWaveformClicked)
+        
+        # 添加到主布局
+        main_layout.addWidget(self.waveformPlot)
+        
+        print(f"波形图组件初始化成功, 组件ID: {id(self.waveformPlot)}")
         
         self.setLayout(main_layout)
     
     def onWaveformClicked(self, event):
         """处理波形图点击事件，跳转到对应位置"""
-        if not self.has_pyqtgraph or self.waveformCurve is None or self.duration <= 0:
+        if self.waveformCurve is None or self.duration <= 0:
             return
             
         try:
@@ -183,7 +172,6 @@ class AudioPlayer(QWidget):
         # 处理file:开头的URL
         if file_path.startswith("file:"):
             # 从URL中提取真实路径
-            from urllib.parse import unquote
             file_path = unquote(file_path.replace("file:///", "").replace("file://", ""))
             
         # 检查文件是否存在    
@@ -214,83 +202,38 @@ class AudioPlayer(QWidget):
     
     def loadWaveform(self, file_path):
         """加载并显示音频波形"""
-        # 更详细的初始检查
-        if not self.has_pyqtgraph:
-            print("波形图加载失败: pyqtgraph模块不可用")
-            return False
-            
-        if self.waveformPlot is None:
-            print("波形图加载失败: 波形图组件未初始化")
-            return False
-            
-        if self.waveformCurve is None:
-            print("波形图加载失败: 波形曲线未初始化")
+        if self.waveformPlot is None or self.waveformCurve is None:
+            print("波形图组件未初始化")
             return False
             
         try:
             print(f"开始加载波形图: {file_path}")
             
-            # 直接使用torchaudio加载音频，它比librosa更快
-            try:
-                import torchaudio
-                import numpy as np
-                import torch
-                
-                print("使用torchaudio加载音频...")
-                waveform, sample_rate = torchaudio.load(file_path)
-                
-                # 转换为单声道
-                if waveform.shape[0] > 1:
-                    waveform = torch.mean(waveform, dim=0, keepdim=True)
-                
-                # 转换为numpy数组以便处理
-                audio_data = waveform.numpy()[0]  # 取第一个通道
-                print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
-                
-                # 处理过长的音频，降采样以提高UI性能
-                if len(audio_data) > 1000:
-                    # 限制最大点数为1000，大幅提高渲染性能
-                    step = max(1, len(audio_data) // 1000)
-                    audio_data = audio_data[::step]
-                    print(f"降采样后长度: {len(audio_data)}")
-                
-                # 标准化音频数据到-1到1之间
-                max_val = np.max(np.abs(audio_data))
-                if max_val > 0:
-                    audio_data = audio_data / max_val
-                
-                # 确保波形可见，即使音量很小
-                if np.max(np.abs(audio_data)) < 0.1:
-                    audio_data = audio_data * 5.0  # 放大波形
-                    print("音频音量较小，已自动放大波形")
-                    
-            except ImportError:
-                # 如果torchaudio不可用，回退到librosa
-                print("torchaudio不可用，尝试使用librosa...")
-                import librosa
-                import numpy as np
-                
-                # 加载音频数据
-                audio_data, sample_rate = librosa.load(file_path, sr=None, mono=True)
-                print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
-                
-                # 处理过长的音频
-                if len(audio_data) > 1000:
-                    # 限制最大点数为1000，大幅提高渲染性能
-                    step = max(1, len(audio_data) // 1000)
-                    audio_data = audio_data[::step]
-                    print(f"降采样后长度: {len(audio_data)}")
-                
-                # 标准化音频数据
-                max_val = np.max(np.abs(audio_data))
-                if max_val > 0:
-                    audio_data = audio_data / max_val
-                
-                # 确保波形可见
-                if np.max(np.abs(audio_data)) < 0.1:
-                    audio_data = audio_data * 5.0  # 放大波形
-                    print("音频音量较小，已自动放大波形")
+            # 使用torchaudio加载音频
+            print("使用torchaudio加载音频...")
+            waveform, sample_rate = torchaudio.load(file_path)
             
+            # 转换为单声道
+            if waveform.shape[0] > 1:
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+            
+            # 转换为numpy数组以便处理
+            audio_data = waveform.numpy()[0]  # 取第一个通道
+            print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
+            
+            # 处理过长的音频，降采样以提高UI性能
+            if len(audio_data) > 1000:
+                # 限制最大点数为1000，大幅提高渲染性能
+                step = max(1, len(audio_data) // 1000)
+                audio_data = audio_data[::step]
+                print(f"降采样后长度: {len(audio_data)}")
+            
+            # 标准化音频数据到-1到1之间
+            max_val = np.max(np.abs(audio_data))
+            if max_val > 0:
+                audio_data = audio_data / max_val
+            
+
             # 保存音频数据和采样率
             self.audio_data = audio_data
             self.sample_rate = sample_rate
@@ -354,16 +297,6 @@ class AudioPlayer(QWidget):
                 
             print(f"波形图更新完成，波形点数: {len(audio_data)}")
             return True
-        except ImportError as e:
-            print(f"加载波形图出错: 缺少必要的库 - {str(e)}")
-            # 尝试安装缺失的库
-            if 'librosa' in str(e):
-                warning_label = QLabel("请安装librosa库以显示波形图: pip install librosa")
-                warning_label.setStyleSheet("color: red;")
-                if self.waveformPlot:
-                    self.waveformPlot.hide()
-                    self.layout().addWidget(warning_label)
-            return False
         except Exception as e:
             print(f"加载波形图出错: {str(e)}")
             traceback.print_exc()
@@ -381,7 +314,7 @@ class AudioPlayer(QWidget):
         self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         
         # 清除波形图
-        if self.has_pyqtgraph and self.waveformCurve is not None:
+        if self.waveformCurve is not None:
             try:
                 # 清除波形数据
                 self.waveformCurve.setData([], [])
@@ -425,7 +358,7 @@ class AudioPlayer(QWidget):
         self.timeLabel.setText(f"{current} / {total}")
         
         # 更新波形图位置线
-        if self.has_pyqtgraph and self.waveformCurve is not None and self.duration > 0:
+        if self.waveformCurve is not None and self.duration > 0:
             try:
                 # 计算当前位置对应的波形图x轴位置
                 curve_data = self.waveformCurve.getData()
@@ -459,7 +392,6 @@ class AudioPlayer(QWidget):
         # 处理URL格式路径，移除"file:"前缀
         if url_string.startswith("file:"):
             # 在Windows上，URL格式可能是file:///D:/path，需要正确转换
-            from urllib.parse import unquote
             path = unquote(url_string[5:])  # 移除"file:"前缀
             # 确保路径格式正确
             if path.startswith("///") and sys.platform == "win32":
@@ -480,7 +412,7 @@ class AudioPlayer(QWidget):
         Returns:
             bool: 设置是否成功
         """
-        if not self.has_pyqtgraph or self.waveformPlot is None:
+        if self.waveformPlot is None:
             print("波形图不可用，无法设置高度")
             return False
             
@@ -512,12 +444,11 @@ class AudioPlayer(QWidget):
         Returns:
             bool: 设置是否成功
         """
-        if not self.has_pyqtgraph or self.waveformPlot is None:
+        if self.waveformPlot is None:
             print("波形图不可用，无法设置背景颜色")
             return False
             
         try:
-            import pyqtgraph as pg
             self.background_color = color
             self.waveformPlot.setBackground(color)
             print(f"波形图背景颜色已设为 {color}")
@@ -536,7 +467,7 @@ class AudioPlayer(QWidget):
         Returns:
             bool: 设置是否成功
         """
-        if not self.has_pyqtgraph or self.waveformPlot is None:
+        if self.waveformPlot is None:
             print("波形图不可用，无法设置前景颜色")
             return False
         
@@ -560,14 +491,13 @@ class AudioPlayer(QWidget):
         Returns:
             bool: 设置是否成功
         """
-        if not self.has_pyqtgraph or self.waveformCurve is None:
+        if self.waveformCurve is None:
             print("波形图不可用，无法设置波形颜色")
             return False
             
         try:
-            import pyqtgraph as pg
             self.waveform_color = color
-            self.waveformCurve.setPen(pg.mkPen(color=color, width=1.5))
+            self.waveformCurve.setPen(pg.mkPen(color=color, width=0.8))
             print(f"波形线条颜色已设为 {color}")
             return True
         except Exception as e:
@@ -584,12 +514,11 @@ class AudioPlayer(QWidget):
         Returns:
             bool: 设置是否成功
         """
-        if not self.has_pyqtgraph or self.positionLine is None:
+        if self.positionLine is None:
             print("波形图不可用，无法设置位置线颜色")
             return False
             
         try:
-            import pyqtgraph as pg
             self.position_line_color = color
             self.positionLine.setPen(pg.mkPen(color=color, width=1.5))
             print(f"位置指示线颜色已设为 {color}")
