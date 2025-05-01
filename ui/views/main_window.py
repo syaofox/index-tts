@@ -4,6 +4,8 @@
 
 import os
 import time
+import subprocess
+import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread
@@ -17,7 +19,7 @@ from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
 from ui.controllers.inference_worker import InferenceWorker
-from ui.config import REPLACE_RULES_CONFIG_PATH
+from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH
 
 
 class MainWindow(QMainWindow):
@@ -400,6 +402,8 @@ class MainWindow(QMainWindow):
         self.history_list = QListWidget()
         self.history_list.setSelectionMode(QListWidget.SelectionMode.SingleSelection)
         self.history_list.itemClicked.connect(self.onHistoryItemClicked)
+        # 添加双击事件
+        self.history_list.itemDoubleClicked.connect(self.onHistoryItemDoubleClicked)
         
         # 添加刷新按钮
         refresh_btn = QPushButton("刷新列表")
@@ -430,9 +434,19 @@ class MainWindow(QMainWindow):
             wav_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
             
             for wav_file in wav_files:
-                item = QListWidgetItem(wav_file.name)
+                # 获取文件的创建/修改时间并格式化
+                file_mtime = wav_file.stat().st_mtime
+                mtime_str = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(file_mtime))
+                
+                # 显示日期和文件名
+                display_text = f"{mtime_str} - {wav_file.name}"
+                
+                item = QListWidgetItem(display_text)
                 item.setData(Qt.ItemDataRole.UserRole, str(wav_file))
                 self.history_list.addItem(item)
+                
+                # 增加提示信息，显示完整路径
+                item.setToolTip(str(wav_file.absolute()))
         except Exception as e:
             QMessageBox.warning(self, "错误", f"加载历史音频时出错: {str(e)}")
     
@@ -444,6 +458,53 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "警告", f"无法加载音频文件: {os.path.basename(file_path)}")
             else:
                 self.statusBar().showMessage(f"已加载历史音频: {os.path.basename(file_path)}", 3000)
+    
+    def onHistoryItemDoubleClicked(self, item):
+        """当历史音频列表项被双击时的处理，使用外部播放器打开音频文件"""
+        file_path = item.data(Qt.ItemDataRole.UserRole)
+        if file_path:
+            try:
+                # 检查文件是否存在
+                if not os.path.exists(file_path):
+                    QMessageBox.warning(self, "警告", f"文件不存在: {os.path.basename(file_path)}")
+                    return
+                
+                # 使用配置的外部播放器打开文件
+                if AUDIO_PLAYER_PATH:
+                    # 检测是否是Adobe Audition
+                    if "Adobe Audition" in AUDIO_PLAYER_PATH:
+                        # 对于Audition，使用完整路径并处理可能的引号问题
+                        abs_file_path = os.path.abspath(file_path)
+                        try:
+                            # 方法1：尝试直接使用进程启动
+                            subprocess.Popen([AUDIO_PLAYER_PATH, abs_file_path])
+                            self.statusBar().showMessage(f"正在尝试使用Audition打开: {os.path.basename(file_path)}", 3000)
+                        except Exception as e:
+                            # 方法2：如果方法1失败，尝试使用shell方式
+                            cmd = f'"{AUDIO_PLAYER_PATH}" "{abs_file_path}"'
+                            subprocess.Popen(cmd, shell=True)
+                            self.statusBar().showMessage(f"使用shell方式打开Audition: {os.path.basename(file_path)}", 3000)
+                    else:
+                        # 使用指定的播放器
+                        subprocess.Popen([AUDIO_PLAYER_PATH, file_path])
+                        self.statusBar().showMessage(f"使用指定播放器打开: {os.path.basename(file_path)}", 3000)
+                else:
+                    # 使用系统默认关联的播放器
+                    if os.name == 'nt':  # Windows
+                        os.startfile(file_path)
+                    else:  # Linux, macOS
+                        # 对于Linux和macOS，使用xdg-open或open命令
+                        open_cmd = 'open' if sys.platform == 'darwin' else 'xdg-open'
+                        subprocess.Popen([open_cmd, file_path], shell=False)
+                    
+                    self.statusBar().showMessage(f"使用系统默认播放器打开: {os.path.basename(file_path)}", 3000)
+            except Exception as e:
+                QMessageBox.warning(self, "错误", f"打开音频文件时出错: {str(e)}")
+                # 出错时仍尝试使用内置播放器播放
+                if not self.result_audio_player.setAudioFile(file_path):
+                    QMessageBox.warning(self, "警告", f"无法使用内置播放器加载音频文件: {os.path.basename(file_path)}")
+                else:
+                    self.statusBar().showMessage(f"已使用内置播放器加载: {os.path.basename(file_path)}", 3000)
     
     def updateCharacterComboBox(self):
         """更新角色下拉列表"""
