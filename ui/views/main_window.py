@@ -46,7 +46,7 @@ class MainWindow(QMainWindow):
     
     def setupUI(self):
         self.setWindowTitle("IndexTTS 语音生成界面")
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(500, 900)
         
         # 创建主布局
         self.main_widget = QWidget()
