@@ -7,6 +7,7 @@ import time
 import re
 
 from PySide6.QtCore import QObject, Signal
+from ui.config import REPLACE_RULES_CONFIG_PATH
 
 
 class InferenceWorker(QObject):
@@ -19,7 +20,7 @@ class InferenceWorker(QObject):
     # 特殊标记
     BR_TAG = "<br>"  # 空行标记
     # 固定的配置文件路径
-    REPLACE_CONFIG_PATH = "ui/text_replace_config.txt"
+    REPLACE_CONFIG_PATH = REPLACE_RULES_CONFIG_PATH
     
     # 类级别的配置缓存
     _replace_rules_cache = []  # 缓存的替换规则

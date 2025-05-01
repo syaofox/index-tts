@@ -17,6 +17,7 @@ from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
 from ui.controllers.inference_worker import InferenceWorker
+from ui.config import REPLACE_RULES_CONFIG_PATH
 
 
 class MainWindow(QMainWindow):
@@ -30,7 +31,7 @@ class MainWindow(QMainWindow):
         self.inference_worker = None
         
         # 替换规则配置文件路径
-        self.replace_config_path = "ui/text_replace_config.txt"
+        self.replace_config_path = REPLACE_RULES_CONFIG_PATH
         
         self.setupUI()
         self.loadHistoryAudio()
