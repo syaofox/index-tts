@@ -248,9 +248,9 @@ class AudioPlayer(QWidget):
                 print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
                 
                 # 处理过长的音频，降采样以提高UI性能
-                if len(audio_data) > 10000:
-                    # 增加降采样力度以提高效率
-                    step = max(1, len(audio_data) // 5000)
+                if len(audio_data) > 1000:
+                    # 限制最大点数为1000，大幅提高渲染性能
+                    step = max(1, len(audio_data) // 1000)
                     audio_data = audio_data[::step]
                     print(f"降采样后长度: {len(audio_data)}")
                 
@@ -275,9 +275,9 @@ class AudioPlayer(QWidget):
                 print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
                 
                 # 处理过长的音频
-                if len(audio_data) > 10000:
-                    # 增加降采样力度以提高效率
-                    step = max(1, len(audio_data) // 5000)
+                if len(audio_data) > 1000:
+                    # 限制最大点数为1000，大幅提高渲染性能
+                    step = max(1, len(audio_data) // 1000)
                     audio_data = audio_data[::step]
                     print(f"降采样后长度: {len(audio_data)}")
                 
@@ -296,12 +296,12 @@ class AudioPlayer(QWidget):
             self.sample_rate = sample_rate
             
             # 准备绘图数据 - 进一步优化点数
-            # 对于超过5000个点的数据进行额外的优化：只绘制极值点和部分采样点
-            if len(audio_data) > 5000:
+            # 对于超过1000个点的数据进行额外的优化：只绘制极值点和部分采样点
+            if len(audio_data) > 1000:
                 print("进行额外的绘图点数优化...")
                 
                 # 计算每个段的最大值和最小值
-                segment_size = len(audio_data) // 2500  # 将数据分为2500段
+                segment_size = len(audio_data) // 500  # 将数据分为500段
                 if segment_size < 2:
                     segment_size = 2
                 
