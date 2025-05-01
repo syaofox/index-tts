@@ -15,37 +15,45 @@ class InferenceWorker(QObject):
     progress = Signal(str)  # 进度信号，发送处理状态信息
     error = Signal(str)     # 错误信号
 
-    def __init__(self, tts, voice_path, text, output_path=None):
+    def __init__(self, tts, voice_path, text, output_path=None, 
+                 split_method="paragraph", punct_chars="。？！", pause_time=0.3):
         super().__init__()
         self.tts = tts
         self.voice_path = voice_path
         self.text = text
         self.output_path = output_path
+        self.split_method = split_method  # "paragraph" 或 "punctuation"
+        self.punct_chars = punct_chars    # 分割标点符号
+        self.pause_time = pause_time      # 段落间停顿时间（秒）
 
     def run(self):
         try:
             if not self.output_path:
                 self.output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
             
-            # 按空行分割文本
-            self.progress.emit("按段落分割文本...")
-            paragraphs = self.split_text_by_newlines(self.text)
+            # 根据选择的方法分割文本
+            if self.split_method == "punctuation" and self.punct_chars:
+                self.progress.emit(f"按标点符号分割文本: {self.punct_chars}...")
+                segments = self.split_text_by_punctuation(self.text, self.punct_chars)
+            else:
+                self.progress.emit("按段落分割文本...")
+                segments = self.split_text_by_newlines(self.text)
             
-            if len(paragraphs) > 1:
-                self.progress.emit(f"共分为 {len(paragraphs)} 个段落进行处理...")
+            if len(segments) > 1:
+                self.progress.emit(f"共分为 {len(segments)} 个片段进行处理...")
                 temp_outputs = []
                 
-                for i, para in enumerate(paragraphs):
-                    if not para.strip():  # 跳过空段落
+                for i, segment in enumerate(segments):
+                    if not segment.strip():  # 跳过空片段
                         continue
                     temp_path = os.path.join("outputs", f"temp_{int(time.time())}_{i}.wav")
-                    self.progress.emit(f"处理第 {i+1}/{len(paragraphs)} 段...")
-                    self.tts.infer(self.voice_path, para, temp_path)
+                    self.progress.emit(f"处理第 {i+1}/{len(segments)} 段...")
+                    self.tts.infer(self.voice_path, segment, temp_path)
                     temp_outputs.append(temp_path)
                 
-                # 合并所有音频片段，并在段落间添加静音
-                self.progress.emit("合并音频片段，添加段落间静音...")
-                self.merge_audio_files_with_silence(temp_outputs, self.output_path, paragraphs)
+                # 合并所有音频片段，并在片段间添加静音
+                self.progress.emit(f"合并音频片段，添加片段间静音 ({self.pause_time}秒)...")
+                self.merge_audio_files_with_silence(temp_outputs, self.output_path, segments)
                 
                 # 清理临时文件
                 for temp_file in temp_outputs:
@@ -61,6 +69,35 @@ class InferenceWorker(QObject):
             self.finished.emit(self.output_path)
         except Exception as e:
             self.error.emit(f"处理过程中出错: {str(e)}")
+    
+    def split_text_by_punctuation(self, text, punct_chars):
+        """按指定的标点符号分割文本"""
+        if not text:
+            return []
+            
+        # 构建用于分割的正则表达式
+        # 例如punct_chars为"。？！"时，正则为"([。？！])"
+        import re
+        pattern = f"([{re.escape(punct_chars)}])"
+        
+        # 分割文本
+        parts = re.split(pattern, text)
+        
+        # 将标点符号与前面的文本合并
+        segments = []
+        i = 0
+        while i < len(parts):
+            if i + 1 < len(parts) and parts[i+1] in punct_chars:
+                # 当前文本加上后面的标点
+                segments.append(parts[i] + parts[i+1])
+                i += 2
+            else:
+                # 没有标点的文本
+                if parts[i]:  # 不添加空文本
+                    segments.append(parts[i])
+                i += 1
+        
+        return segments
     
     def split_text_by_newlines(self, text):
         """按空行分割文本成多个段落"""
@@ -94,8 +131,8 @@ class InferenceWorker(QObject):
         silence = torch.zeros(1, num_samples)
         return silence
     
-    def merge_audio_files_with_silence(self, input_files, output_file, paragraphs):
-        """合并多个音频文件成一个，并在段落间添加静音"""
+    def merge_audio_files_with_silence(self, input_files, output_file, segments):
+        """合并多个音频文件成一个，并在片段间添加静音"""
         import torch
         import torchaudio
         import numpy as np
@@ -111,8 +148,7 @@ class InferenceWorker(QObject):
         output_waveforms = []
         
         # 确定非空段落的索引
-        non_empty_indices = [i for i, para in enumerate(paragraphs) if para.strip()]
-        print(f"非空段落索引: {non_empty_indices}")
+        non_empty_indices = [i for i, segment in enumerate(segments) if segment.strip()]
         
         # 初始化音频文件索引
         file_index = 0
@@ -124,21 +160,12 @@ class InferenceWorker(QObject):
                 waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
             output_waveforms.append(waveform)
             file_index += 1
-            print(f"添加音频: 段落 {non_empty_indices[0]+1}")
         
         # 处理剩余的非空段落
         for i in range(1, len(non_empty_indices)):
-            # 计算当前非空段落和前一个非空段落之间的空段落数量
-            prev_index = non_empty_indices[i-1]
-            current_index = non_empty_indices[i]
-            empty_paragraphs_between = current_index - prev_index - 1
-            
-            # 添加静音（每个空段落0.3秒）
-            if empty_paragraphs_between > 0:
-                silence_duration = 0.3 * empty_paragraphs_between
-                silence = self.create_silence(silence_duration, sample_rate)
-                output_waveforms.append(silence)
-                print(f"添加静音: {silence_duration}秒 (段落 {prev_index+1} 和 {current_index+1} 之间)")
+            # 添加静音
+            silence = self.create_silence(self.pause_time, sample_rate)
+            output_waveforms.append(silence)
             
             # 添加当前段落的音频
             if file_index < len(input_files):
@@ -147,7 +174,6 @@ class InferenceWorker(QObject):
                     waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
                 output_waveforms.append(waveform)
                 file_index += 1
-                print(f"添加音频: 段落 {current_index+1}")
         
         # 检查是否有波形需要合并
         if not output_waveforms:
@@ -157,5 +183,4 @@ class InferenceWorker(QObject):
         merged_waveform = torch.cat(output_waveforms, dim=1)
         
         # 保存合并后的音频
-        torchaudio.save(output_file, merged_waveform, sample_rate)
-        print(f"合并完成: 共 {len(output_waveforms)} 个音频片段") 
+        torchaudio.save(output_file, merged_waveform, sample_rate) 

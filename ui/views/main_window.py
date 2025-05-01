@@ -130,6 +130,48 @@ class MainWindow(QMainWindow):
         top_layout.addWidget(text_label)
         top_layout.addWidget(self.text_edit)
         
+        # 文本分割设置区域
+        text_split_widget = QWidget()
+        text_split_layout = QHBoxLayout(text_split_widget)
+        
+        # 标点分隔设置
+        self.split_checkbox = QComboBox()
+        self.split_checkbox.addItem("段落分割（默认）", "paragraph")
+        self.split_checkbox.addItem("按标点分割", "punctuation")
+        
+        split_label = QLabel("分割方式:")
+        text_split_layout.addWidget(split_label)
+        text_split_layout.addWidget(self.split_checkbox)
+        
+        # 标点符号设置
+        punct_label = QLabel("分割标点:")
+        self.punct_edit = QTextEdit()
+        self.punct_edit.setFixedHeight(28)  # 设置为单行高度
+        self.punct_edit.setPlaceholderText("例如: 。？！，；")
+        self.punct_edit.setText("。？！")
+        
+        text_split_layout.addWidget(punct_label)
+        text_split_layout.addWidget(self.punct_edit)
+        
+        # 停顿时间设置
+        pause_label = QLabel("停顿时间(秒):")
+        self.pause_edit = QTextEdit()
+        self.pause_edit.setFixedHeight(28)  # 设置为单行高度
+        self.pause_edit.setPlaceholderText("默认: 0.3")
+        self.pause_edit.setText("0.3")
+        
+        text_split_layout.addWidget(pause_label)
+        text_split_layout.addWidget(self.pause_edit)
+        text_split_layout.addStretch(1)
+        
+        # 启用/禁用标点设置的联动
+        self.split_checkbox.currentIndexChanged.connect(self.onSplitMethodChanged)
+        
+        top_layout.addWidget(text_split_widget)
+        
+        # 初始化时设置标点编辑框的状态
+        self.onSplitMethodChanged()
+        
         # 推理按钮 - 上移到此处，紧跟文本编辑器
         self.infer_btn = QPushButton("生成语音")
         self.infer_btn.setMinimumHeight(40)
@@ -314,47 +356,89 @@ class MainWindow(QMainWindow):
             else:
                 self.statusBar().showMessage(f"已选择参考音频: {os.path.basename(file_path)}", 3000)
     
+    def onSplitMethodChanged(self, index=None):
+        """处理分割方法改变"""
+        split_method = self.split_checkbox.currentData()
+        # 启用或禁用标点设置
+        is_punct_enabled = split_method == "punctuation"
+        # 启用/禁用标点输入和停顿时间输入
+        self.punct_edit.setEnabled(is_punct_enabled)
+
     def startInference(self):
-        """开始语音生成推理"""
+        """开始推理处理"""
+        print("开始推理过程...")
+        # 检查是否有推理任务正在进行
+        if self.inference_thread and self.inference_thread.isRunning():
+            print(f"推理线程正在运行: {self.inference_thread}")
+            QMessageBox.warning(self, "警告", "已有推理任务在进行中，请等待完成")
+            return
+        else:
+            print(f"当前无活动推理线程，可以开始新任务")
+            
+        text = self.text_edit.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "警告", "请输入要转换为语音的文本")
+            return
+        
         # 获取参考音频路径
         voice_path = self.ref_audio_player.getAudioPath()
         if not voice_path:
             QMessageBox.warning(self, "警告", "请先选择参考音频")
             return
         
-        # 获取输入文本
-        text = self.text_edit.toPlainText().strip()
-        if not text:
-            QMessageBox.warning(self, "警告", "请输入推理文本")
+        # 获取分割方式和参数
+        split_method = self.split_checkbox.currentData()
+        punct_chars = self.punct_edit.toPlainText() if split_method == "punctuation" else ""
+        
+        # 获取停顿时间并验证
+        try:
+            pause_time = float(self.pause_edit.toPlainText())
+            if pause_time < 0:
+                raise ValueError("停顿时间不能为负数")
+        except ValueError:
+            QMessageBox.warning(self, "警告", "请输入有效的停顿时间（秒）")
             return
         
-        # 禁用推理按钮，防止重复点击
+        # 禁用推理按钮
         self.infer_btn.setEnabled(False)
-        self.infer_btn.setText("生成中...")
+        self.infer_btn.setText("语音生成中...")
         self.statusBar().showMessage("正在生成语音...")
         
         # 创建输出路径
         output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
         
-        # 创建工作线程
+        # 创建并启动推理线程
         self.inference_thread = QThread()
-        self.inference_worker = InferenceWorker(self.tts, voice_path, text, output_path)
-        self.inference_worker.moveToThread(self.inference_thread)
+        self.inference_worker = InferenceWorker(
+            self.tts, 
+            voice_path, 
+            text,
+            output_path=output_path,
+            split_method=split_method,
+            punct_chars=punct_chars,
+            pause_time=pause_time
+        )
         
         # 连接信号
+        self.inference_worker.moveToThread(self.inference_thread)
         self.inference_thread.started.connect(self.inference_worker.run)
         self.inference_worker.finished.connect(self.onInferenceFinished)
         self.inference_worker.progress.connect(self.onInferenceProgress)
         self.inference_worker.error.connect(self.onInferenceError)
+        # 确保推理完成或出错时线程退出
         self.inference_worker.finished.connect(self.inference_thread.quit)
+        self.inference_worker.error.connect(self.inference_thread.quit)
+        # 清理工作
         self.inference_worker.finished.connect(self.inference_worker.deleteLater)
         self.inference_thread.finished.connect(self.inference_thread.deleteLater)
         
         # 启动线程
         self.inference_thread.start()
+        print(f"推理线程已启动: {self.inference_thread}")
     
     def onInferenceFinished(self, output_path):
         """推理完成时的处理"""
+        print(f"推理完成，输出路径: {output_path}")
         # 更新界面
         self.infer_btn.setEnabled(True)
         self.infer_btn.setText("生成语音")
@@ -365,6 +449,12 @@ class MainWindow(QMainWindow):
         
         # 刷新历史列表
         self.loadHistoryAudio()
+        
+        # 重置线程状态
+        print(f"重置前线程状态: thread={self.inference_thread}, worker={self.inference_worker}")
+        self.inference_thread = None
+        self.inference_worker = None
+        print("线程状态已重置")
     
     def onInferenceProgress(self, message):
         """处理推理进度更新"""
@@ -372,11 +462,18 @@ class MainWindow(QMainWindow):
     
     def onInferenceError(self, error_message):
         """处理推理错误"""
+        print(f"推理出错: {error_message}")
         self.infer_btn.setEnabled(True)
         self.infer_btn.setText("生成语音")
         self.statusBar().showMessage("生成失败", 5000)
         
         QMessageBox.critical(self, "错误", error_message)
+        
+        # 重置线程状态
+        print(f"重置前线程状态: thread={self.inference_thread}, worker={self.inference_worker}")
+        self.inference_thread = None
+        self.inference_worker = None
+        print("线程状态已重置")
     
     def cleanupOnExit(self):
         """程序退出前清理临时文件"""
