@@ -654,18 +654,19 @@ class MainWindow(QMainWindow):
         Returns:
             list: 包含(角色名, 文本内容)元组的列表
         """
+        # 按行分割文本
         lines = text.split("\n")
         result = []
         
         current_role = None
-        current_text = []
+        current_text_lines = []
         
         # 检查文本是否包含角色标记
         has_role_marker = False
         for line in lines:
-            line_strip = line.strip()
+            line_stripped = line.strip()
             # 检查是否是角色标记行（格式为 <角色名>）
-            if line_strip.startswith("<") and line_strip.endswith(">"):
+            if line_stripped.startswith("<") and line_stripped.endswith(">"):
                 has_role_marker = True
                 break
         
@@ -675,24 +676,26 @@ class MainWindow(QMainWindow):
         
         # 解析多角色文本
         for line in lines:
-            line_strip = line.strip()
+            line_stripped = line.strip()
             # 检查是否是角色标记行（格式为 <角色名>）
-            if line_strip.startswith("<") and line_strip.endswith(">"):
+            if line_stripped.startswith("<") and line_stripped.endswith(">"):
                 # 如果已有当前角色，保存之前的内容
-                if current_role is not None and current_text:
-                    result.append((current_role, "\n".join(current_text).strip()))
-                    current_text = []
+                if current_role is not None and len(current_text_lines) > 0:
+                    # 不去除空行，直接连接所有行
+                    result.append((current_role, "\n".join(current_text_lines)))
+                    current_text_lines = []
                 
                 # 提取新角色名
-                current_role = line_strip[1:-1].strip()
+                current_role = line_stripped[1:-1].strip()
             else:
                 # 只有当已经有角色标记时才添加文本
                 if current_role is not None:
-                    current_text.append(line)
+                    # 不管是否为空行，都添加到当前角色的文本中
+                    current_text_lines.append(line)  # 保留原始行，包括空行
         
         # 添加最后一个角色的内容
-        if current_role is not None and current_text:
-            result.append((current_role, "\n".join(current_text).strip()))
+        if current_role is not None and len(current_text_lines) > 0:
+            result.append((current_role, "\n".join(current_text_lines)))
         
         return result
     
