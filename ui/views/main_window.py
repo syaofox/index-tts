@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from ui.views.audio_player import AudioPlayer
+from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
 from ui.controllers.inference_worker import InferenceWorker
 
@@ -108,9 +109,12 @@ class MainWindow(QMainWindow):
         # 参考音频区域
         self.ref_audio_player = AudioPlayer()
         
-        self.select_ref_btn = QPushButton("选择参考音频")
+        # 使用支持拖放的按钮替换原来的按钮
+        self.select_ref_btn = DropFileButton("选择参考音频")
         self.select_ref_btn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton))
         self.select_ref_btn.clicked.connect(self.selectReferenceAudio)
+        # 连接文件拖放信号
+        self.select_ref_btn.fileDropped.connect(self.onReferenceAudioDropped)
         
         # 音频控制区域
         ref_layout = QHBoxLayout()
@@ -340,6 +344,22 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "警告", "所选文件无效或无法作为音频播放")
             else:
                 self.statusBar().showMessage(f"已选择参考音频: {os.path.basename(file_path)}", 3000)
+    
+    def onReferenceAudioDropped(self, file_path):
+        """处理拖放到选择参考音频按钮上的文件"""
+        # 检查文件是否为支持的音频格式
+        file_ext = os.path.splitext(file_path)[1].lower()
+        supported_exts = ['.wav', '.mp3', '.flac', '.ogg', '.aac']
+        
+        if file_ext not in supported_exts:
+            QMessageBox.warning(self, "警告", "不支持的音频格式，请使用WAV、MP3、FLAC、OGG或AAC格式")
+            return
+        
+        # 直接加载音频文件
+        if not self.ref_audio_player.setAudioFile(file_path):
+            QMessageBox.warning(self, "警告", "所选文件无效或无法作为音频播放")
+        else:
+            self.statusBar().showMessage(f"已加载拖放的参考音频: {os.path.basename(file_path)}", 3000)
     
     def startInference(self):
         """开始推理处理"""
