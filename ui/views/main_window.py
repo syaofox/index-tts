@@ -29,6 +29,9 @@ class MainWindow(QMainWindow):
         self.inference_thread = None
         self.inference_worker = None
         
+        # 替换规则配置文件路径
+        self.replace_config_path = "ui/text_replace_config.txt"
+        
         self.setupUI()
         self.loadHistoryAudio()
         
@@ -56,8 +59,220 @@ class MainWindow(QMainWindow):
         self.setupInferenceTab()
         self.tab_widget.addTab(self.inference_tab, "推理界面")
         
+        # 创建"替换规则"选项卡
+        self.replace_rules_tab = QWidget()
+        self.setupReplaceRulesTab()
+        self.tab_widget.addTab(self.replace_rules_tab, "替换规则")
+        
         # 状态栏
         self.statusBar().showMessage("就绪")
+    
+    def setupReplaceRulesTab(self):
+        """创建替换规则编辑选项卡"""
+        layout = QVBoxLayout(self.replace_rules_tab)
+        
+        # 添加说明标签
+        help_label = QLabel("编辑文本替换规则配置\n格式：查找字符串|需修改字符串|替换后的字符串\n示例：你好呀|你好|sa3 bi1")
+        help_label.setWordWrap(True)
+        layout.addWidget(help_label)
+        
+        # 创建上下分割器
+        splitter = QSplitter(Qt.Orientation.Vertical)
+        layout.addWidget(splitter)
+        
+        # 上部分 - 规则编辑区域
+        edit_widget = QWidget()
+        edit_layout = QVBoxLayout(edit_widget)
+        
+        # 添加文本编辑器
+        self.rules_edit = QTextEdit()
+        self.rules_edit.setAcceptRichText(False)
+        self.rules_edit.setPlaceholderText("请输入替换规则，每行一条...")
+        edit_layout.addWidget(self.rules_edit)
+        
+        # 创建按钮区域
+        buttons_layout = QHBoxLayout()
+        
+        # 添加加载按钮
+        self.load_rules_btn = QPushButton("加载规则")
+        self.load_rules_btn.clicked.connect(self.loadReplaceRules)
+        buttons_layout.addWidget(self.load_rules_btn)
+        
+        # 添加保存按钮
+        self.save_rules_btn = QPushButton("保存规则")
+        self.save_rules_btn.clicked.connect(self.saveReplaceRules)
+        buttons_layout.addWidget(self.save_rules_btn)
+        
+        # 添加刷新按钮
+        self.refresh_rules_btn = QPushButton("重置")
+        self.refresh_rules_btn.clicked.connect(self.resetReplaceRules)
+        buttons_layout.addWidget(self.refresh_rules_btn)
+        
+        # 添加按钮布局
+        buttons_layout.addStretch(1)
+        edit_layout.addLayout(buttons_layout)
+        
+        # 下部分 - 规则测试区域
+        test_widget = QWidget()
+        test_layout = QVBoxLayout(test_widget)
+        
+        # 测试区域标题
+        test_label = QLabel("规则测试")
+        test_label.setStyleSheet("font-weight: bold;")
+        test_layout.addWidget(test_label)
+        
+        # 测试输入
+        test_input_label = QLabel("测试文本:")
+        self.test_input = QTextEdit()
+        self.test_input.setPlaceholderText("输入要测试的文本...")
+        self.test_input.setMaximumHeight(80)
+        test_layout.addWidget(test_input_label)
+        test_layout.addWidget(self.test_input)
+        
+        # 测试结果
+        test_result_label = QLabel("替换结果:")
+        self.test_result = QTextEdit()
+        self.test_result.setReadOnly(True)
+        self.test_result.setPlaceholderText("替换后的文本将显示在这里...")
+        self.test_result.setMaximumHeight(80)
+        test_layout.addWidget(test_result_label)
+        test_layout.addWidget(self.test_result)
+        
+        # 测试按钮
+        self.test_rules_btn = QPushButton("测试替换规则")
+        self.test_rules_btn.clicked.connect(self.testReplaceRules)
+        test_layout.addWidget(self.test_rules_btn)
+        
+        # 添加到分割器
+        splitter.addWidget(edit_widget)
+        splitter.addWidget(test_widget)
+        splitter.setSizes([int(self.height() * 0.7), int(self.height() * 0.3)])
+        
+        # 自动加载文件内容
+        self.loadReplaceRules()
+    
+    def testReplaceRules(self):
+        """测试替换规则效果"""
+        try:
+            # 获取测试文本
+            test_text = self.test_input.toPlainText()
+            if not test_text:
+                QMessageBox.warning(self, "警告", "请输入测试文本")
+                return
+            
+            # 获取规则文本
+            rules_text = self.rules_edit.toPlainText()
+            if not self.validateReplaceRules(rules_text):
+                return
+            
+            # 解析规则
+            rules = []
+            for line in rules_text.split('\n'):
+                line = line.strip()
+                if not line or line.startswith('#'):
+                    continue
+                parts = line.split('|')
+                if len(parts) == 3:
+                    search_str, replace_from, replace_to = parts
+                    rules.append((search_str, replace_from, replace_to))
+            
+            # 应用规则
+            result_text = test_text
+            for search_str, replace_from, replace_to in rules:
+                if search_str in result_text:
+                    modified_search_str = search_str.replace(replace_from, replace_to)
+                    result_text = result_text.replace(search_str, modified_search_str)
+            
+            # 显示结果
+            self.test_result.setPlainText(result_text)
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"测试替换规则时出错: {str(e)}")
+    
+    def loadReplaceRules(self):
+        """加载替换规则配置文件"""
+        try:
+            if os.path.exists(self.replace_config_path):
+                with open(self.replace_config_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                self.rules_edit.setPlainText(content)
+                self.statusBar().showMessage("替换规则已加载", 3000)
+            else:
+                self.rules_edit.setPlainText("# 格式：查找字符串|需修改字符串|替换后的字符串")
+                self.statusBar().showMessage("配置文件不存在，已创建默认模板", 3000)
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"加载替换规则配置文件失败: {str(e)}")
+    
+    def saveReplaceRules(self):
+        """保存替换规则配置文件"""
+        try:
+            # 验证规则格式
+            content = self.rules_edit.toPlainText()
+            if not self.validateReplaceRules(content):
+                return
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(self.replace_config_path), exist_ok=True)
+            
+            # 保存文件
+            with open(self.replace_config_path, 'w', encoding='utf-8') as f:
+                f.write(content)
+            
+            QMessageBox.information(self, "成功", "替换规则已成功保存")
+            self.statusBar().showMessage("替换规则已保存", 3000)
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存替换规则配置文件失败: {str(e)}")
+    
+    def validateReplaceRules(self, content):
+        """验证替换规则格式是否正确"""
+        lines = content.split('\n')
+        errors = []
+        line_number = 0
+        
+        for line in lines:
+            line_number += 1
+            line = line.strip()
+            
+            # 跳过空行和注释行
+            if not line or line.startswith('#'):
+                continue
+            
+            # 验证格式是否为 "查找字符串|需修改字符串|替换后的字符串"
+            parts = line.split('|')
+            if len(parts) != 3:
+                errors.append(f"第 {line_number} 行: 格式错误，应为 '查找字符串|需修改字符串|替换后的字符串'")
+                continue
+            
+            # 验证所有部分都不为空
+            search_str, replace_from, replace_to = parts
+            if not search_str.strip():
+                errors.append(f"第 {line_number} 行: '查找字符串' 不能为空")
+            
+            if not replace_from.strip():
+                errors.append(f"第 {line_number} 行: '需修改字符串' 不能为空")
+            
+            # 验证需修改字符串是查找字符串的子串
+            if replace_from not in search_str:
+                errors.append(f"第 {line_number} 行: '需修改字符串' 必须是 '查找字符串' 的子串")
+        
+        # 如果有错误，显示错误信息
+        if errors:
+            error_message = "替换规则格式有误:\n" + "\n".join(errors)
+            QMessageBox.warning(self, "格式错误", error_message)
+            return False
+        
+        return True
+    
+    def resetReplaceRules(self):
+        """重置编辑器内容为原始文件内容"""
+        reply = QMessageBox.question(
+            self, "确认重置", 
+            "确定要重置编辑器内容吗？未保存的更改将丢失。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply == QMessageBox.StandardButton.Yes:
+            self.loadReplaceRules()
     
     def setupInferenceTab(self):
         layout = QVBoxLayout(self.inference_tab)
