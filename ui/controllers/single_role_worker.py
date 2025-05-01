@@ -367,6 +367,8 @@ class SingleRoleInferenceWorker(InferenceBase):
                         audio_waveform = audio_waveform[:waveform.shape[0], :]
                         
                 output_waveforms.append(audio_waveform)
+                silence = self.create_silence(self.pause_time, sample_rate, waveform.shape[0])
+                output_waveforms.append(silence)
             except Exception as e:
                 print(f"加载音频文件出错: {str(e)}")
                 continue
