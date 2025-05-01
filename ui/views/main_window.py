@@ -634,8 +634,15 @@ class MainWindow(QMainWindow):
         self.infer_btn.setText("停止生成")
         self.statusBar().showMessage("正在生成语音...")
         
+        # 获取当前说话人名称
+        current_index = self.char_combo.currentIndex()
+        speaker_name = self.char_combo.itemData(current_index) if current_index > 0 else "未知说话人"
+        
+        # 创建输出文件名（说话人_文本前50字）
+        filename = self.formatFilename(speaker_name, text)
+        
         # 创建输出路径
-        output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
+        output_path = os.path.join("outputs", f"{filename}.wav")
         
         # 创建并启动推理线程
         self.inference_thread = QThread()
@@ -703,7 +710,8 @@ class MainWindow(QMainWindow):
         self.infer_btn.setText("生成语音")
         
         # 检查是否为部分结果
-        is_partial = "partial" in os.path.basename(output_path).lower()
+        basename = os.path.basename(output_path)
+        is_partial = "_部分" in basename or "_最后片段" in basename
         if is_partial:
             self.statusBar().showMessage("用户中断，已保存部分生成结果", 5000)
         else:
@@ -756,6 +764,39 @@ class MainWindow(QMainWindow):
                 print("临时文件清理完成")
         except Exception as e:
             print(f"清理临时文件出错: {str(e)}")
+    
+    def formatFilename(self, speaker_name, text_content):
+        """
+        格式化音频文件名，确保不包含非法字符
+        
+        Args:
+            speaker_name (str): 说话人名称
+            text_content (str): 文本内容
+            
+        Returns:
+            str: 格式化后的文件名（不包含扩展名）
+        """
+        # 获取当前时间戳
+        timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        
+        # 默认说话人名称
+        if not speaker_name or speaker_name == "-- 选择角色 --":
+            speaker_name = "未知说话人"
+        
+        # 清理文本内容（去除换行符、空格和文件名非法字符）
+        text = text_content.strip()
+        # 替换换行符和空格
+        text = text.replace("\n", "").replace("\r", "").replace(" ", "").replace("\t", "")
+        # 替换Windows文件名中的非法字符（\ / : * ? " < > |）
+        invalid_chars = '\\/:"*?<>|'
+        for char in invalid_chars:
+            text = text.replace(char, "_")
+        
+        # 限制文本长度（取前50个字符）
+        text = text[:50]
+        
+        # 创建文件名 [时间戳][说话人]文本
+        return f"[{speaker_name}][{timestamp}]{text}"
     
     def exportCharacter(self):
         """导出选中的角色为单独文件"""

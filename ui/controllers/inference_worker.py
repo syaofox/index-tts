@@ -114,8 +114,12 @@ class InferenceWorker(QObject):
             
         self.progress.emit("正在合并已生成的部分内容...")
         try:
-            # 合并现有的音频片段
-            partial_output_path = os.path.join("outputs", f"partial_spk_{int(time.time())}.wav")
+            # 获取基础文件名（如果有）
+            base_output_path = self.output_path
+            base_filename = os.path.splitext(os.path.basename(base_output_path))[0]
+            # 添加部分输出标记，保持文件名格式一致
+            partial_output_path = os.path.join("outputs", f"{base_filename}_部分.wav")
+            
             self.progress.emit(f"正在合并 {len(temp_outputs)} 个已生成的片段...")
             self.merge_audio_files_with_br(temp_outputs, silence_positions, preprocessed_segments, partial_output_path)
             
@@ -135,7 +139,12 @@ class InferenceWorker(QObject):
             # 如果合并失败，仍然尝试保留最后一个生成的片段
             if temp_outputs:
                 last_file = temp_outputs[-1][1]
-                partial_output_path = os.path.join("outputs", f"partial_spk_{int(time.time())}.wav")
+                # 获取基础文件名（如果有）
+                base_output_path = self.output_path
+                base_filename = os.path.splitext(os.path.basename(base_output_path))[0]
+                # 添加部分输出标记，保持文件名格式一致
+                partial_output_path = os.path.join("outputs", f"{base_filename}_最后片段.wav")
+                
                 try:
                     self.progress.emit("合并失败，尝试保存最后生成的片段...")
                     import shutil
@@ -160,8 +169,10 @@ class InferenceWorker(QObject):
 
     def run(self):
         try:
+            # 确保输出路径已设置
             if not self.output_path:
-                self.output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
+                # 如果未设置输出路径，使用默认格式（使用当前时间戳）
+                self.output_path = os.path.join("outputs", f"未命名_{int(time.time())}.wav")
             
             # 预处理文本
             self.progress.emit("预处理文本...")
