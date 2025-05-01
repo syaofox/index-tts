@@ -15,7 +15,9 @@ from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 class AudioPlayer(QWidget):
     """音频播放器控件"""
-    def __init__(self, label="音频播放器", parent=None):
+    def __init__(self, label="音频播放器", parent=None, waveform_height=40, 
+                 background_color='w', foreground_color='k', 
+                 waveform_color=(200, 200, 200), position_line_color='red'):
         super().__init__(parent)
         self.label = label
         self.mediaPlayer = QMediaPlayer()
@@ -40,6 +42,13 @@ class AudioPlayer(QWidget):
         self.audio_data = None
         self.sample_rate = None
         self.duration = 0
+        self.waveform_height = waveform_height  # 保存波形图高度设置
+        
+        # 保存颜色设置
+        self.background_color = background_color
+        self.foreground_color = foreground_color
+        self.waveform_color = waveform_color
+        self.position_line_color = position_line_color
         
         # 设置界面
         self.setupUI()
@@ -81,23 +90,23 @@ class AudioPlayer(QWidget):
         try:
             # 尝试导入并初始化波形图
             import pyqtgraph as pg
-            # 设置背景为白色
-            pg.setConfigOption('background', 'w')
-            # 设置前景为黑色
-            pg.setConfigOption('foreground', 'k')
+            # 设置背景为设定颜色
+            pg.setConfigOption('background', self.background_color)
+            # 设置前景为设定颜色
+            pg.setConfigOption('foreground', self.foreground_color)
             
             # 创建波形图小部件
-            self.waveformPlot = pg.PlotWidget(background='w')  # 使用命名参数
-            self.waveformPlot.setFixedHeight(100)  # 增加高度使波形更明显，由于移除了进度条，可以增加波形图高度
+            self.waveformPlot = pg.PlotWidget(background=self.background_color)  # 使用设定的背景色
+            self.waveformPlot.setFixedHeight(self.waveform_height)  # 使用设置的高度值
             self.waveformPlot.setMouseEnabled(x=True, y=False)  # 启用X轴方向的鼠标交互
             self.waveformPlot.hideAxis('left')  # 隐藏Y轴
             self.waveformPlot.hideAxis('bottom')  # 隐藏X轴
             self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
-            self.waveformPlot.setMinimumHeight(100)  # 确保有最小高度
+            self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
             
-            # 初始化波形图数据 - 使用淡灰色
-            self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=(200, 200, 200), width=1.5))
-            self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color='red', width=1.5))
+            # 初始化波形图数据 - 使用设定的波形颜色
+            self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=self.waveform_color, width=1.5))
+            self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, width=1.5))
             self.waveformPlot.addItem(self.positionLine)
             
             # 添加波形图点击事件处理
@@ -460,4 +469,132 @@ class AudioPlayer(QWidget):
     
     def setVolume(self, volume):
         """设置音量，取值范围0.0-1.0"""
-        self.audioOutput.setVolume(volume) 
+        self.audioOutput.setVolume(volume)
+    
+    def setWaveformHeight(self, height):
+        """设置波形图高度
+        
+        Args:
+            height (int): 波形图高度（像素）
+        
+        Returns:
+            bool: 设置是否成功
+        """
+        if not self.has_pyqtgraph or self.waveformPlot is None:
+            print("波形图不可用，无法设置高度")
+            return False
+            
+        try:
+            self.waveform_height = height
+            self.waveformPlot.setFixedHeight(height)
+            self.waveformPlot.setMinimumHeight(max(30, height))
+            print(f"波形图高度已设为 {height} 像素")
+            return True
+        except Exception as e:
+            print(f"设置波形图高度出错: {str(e)}")
+            traceback.print_exc()
+            return False
+            
+    def getWaveformHeight(self):
+        """获取当前波形图高度
+        
+        Returns:
+            int: 当前波形图高度（像素）
+        """
+        return self.waveform_height
+
+    def setBackgroundColor(self, color):
+        """设置波形图背景颜色
+        
+        Args:
+            color: 颜色值，可以是名称字符串(如'white')、RGB元组(如(255,255,255))或十六进制字符串(如'#FFFFFF')
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        if not self.has_pyqtgraph or self.waveformPlot is None:
+            print("波形图不可用，无法设置背景颜色")
+            return False
+            
+        try:
+            import pyqtgraph as pg
+            self.background_color = color
+            self.waveformPlot.setBackground(color)
+            print(f"波形图背景颜色已设为 {color}")
+            return True
+        except Exception as e:
+            print(f"设置波形图背景颜色出错: {str(e)}")
+            traceback.print_exc()
+            return False
+    
+    def setForegroundColor(self, color):
+        """设置波形图前景颜色
+        
+        Args:
+            color: 颜色值，可以是名称字符串(如'black')、RGB元组(如(0,0,0))或十六进制字符串(如'#000000')
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        if not self.has_pyqtgraph or self.waveformPlot is None:
+            print("波形图不可用，无法设置前景颜色")
+            return False
+        
+        try:
+            self.foreground_color = color
+            # 前景色主要影响坐标轴和文本，但我们已经隐藏了坐标轴
+            # 需要重新应用样式或重新创建控件才能完全生效
+            print(f"波形图前景颜色已设为 {color}")
+            return True
+        except Exception as e:
+            print(f"设置波形图前景颜色出错: {str(e)}")
+            traceback.print_exc()
+            return False
+    
+    def setWaveformColor(self, color):
+        """设置波形线条颜色
+        
+        Args:
+            color: 颜色值，可以是名称字符串(如'blue')、RGB元组(如(0,0,255))或十六进制字符串(如'#0000FF')
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        if not self.has_pyqtgraph or self.waveformCurve is None:
+            print("波形图不可用，无法设置波形颜色")
+            return False
+            
+        try:
+            import pyqtgraph as pg
+            self.waveform_color = color
+            self.waveformCurve.setPen(pg.mkPen(color=color, width=1.5))
+            print(f"波形线条颜色已设为 {color}")
+            return True
+        except Exception as e:
+            print(f"设置波形线条颜色出错: {str(e)}")
+            traceback.print_exc()
+            return False
+    
+    def setPositionLineColor(self, color):
+        """设置位置指示线颜色
+        
+        Args:
+            color: 颜色值，可以是名称字符串(如'red')、RGB元组(如(255,0,0))或十六进制字符串(如'#FF0000')
+            
+        Returns:
+            bool: 设置是否成功
+        """
+        if not self.has_pyqtgraph or self.positionLine is None:
+            print("波形图不可用，无法设置位置线颜色")
+            return False
+            
+        try:
+            import pyqtgraph as pg
+            self.position_line_color = color
+            self.positionLine.setPen(pg.mkPen(color=color, width=1.5))
+            print(f"位置指示线颜色已设为 {color}")
+            return True
+        except Exception as e:
+            print(f"设置位置指示线颜色出错: {str(e)}")
+            traceback.print_exc()
+            return False 
