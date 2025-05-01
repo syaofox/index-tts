@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
 from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
-from ui.controllers.inference_worker import InferenceWorker, MultiRoleInferenceWorker
+from ui.utils.text_processor import TextProcessor
+from ui.controllers.single_role_worker import SingleRoleInferenceWorker
+from ui.controllers.multi_role_worker import MultiRoleInferenceWorker
 from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH
 
 
@@ -654,50 +656,7 @@ class MainWindow(QMainWindow):
         Returns:
             list: 包含(角色名, 文本内容)元组的列表
         """
-        # 按行分割文本
-        lines = text.split("\n")
-        result = []
-        
-        current_role = None
-        current_text_lines = []
-        
-        # 检查文本是否包含角色标记
-        has_role_marker = False
-        for line in lines:
-            line_stripped = line.strip()
-            # 检查是否是角色标记行（格式为 <角色名>）
-            if line_stripped.startswith("<") and line_stripped.endswith(">"):
-                has_role_marker = True
-                break
-        
-        # 如果没有角色标记，作为单角色处理
-        if not has_role_marker:
-            return [(None, text)]
-        
-        # 解析多角色文本
-        for line in lines:
-            line_stripped = line.strip()
-            # 检查是否是角色标记行（格式为 <角色名>）
-            if line_stripped.startswith("<") and line_stripped.endswith(">"):
-                # 如果已有当前角色，保存之前的内容
-                if current_role is not None and len(current_text_lines) > 0:
-                    # 不去除空行，直接连接所有行
-                    result.append((current_role, "\n".join(current_text_lines)))
-                    current_text_lines = []
-                
-                # 提取新角色名
-                current_role = line_stripped[1:-1].strip()
-            else:
-                # 只有当已经有角色标记时才添加文本
-                if current_role is not None:
-                    # 不管是否为空行，都添加到当前角色的文本中
-                    current_text_lines.append(line)  # 保留原始行，包括空行
-        
-        # 添加最后一个角色的内容
-        if current_role is not None and len(current_text_lines) > 0:
-            result.append((current_role, "\n".join(current_text_lines)))
-        
-        return result
+        return TextProcessor.parse_multi_role_text(text)
     
     def startInference(self):
         """开始推理处理"""
@@ -773,7 +732,7 @@ class MainWindow(QMainWindow):
             
             # 创建并启动推理线程
             self.inference_thread = QThread()
-            self.inference_worker = InferenceWorker(
+            self.inference_worker = SingleRoleInferenceWorker(
                 self.tts, 
                 voice_path, 
                 text,
@@ -810,31 +769,42 @@ class MainWindow(QMainWindow):
             punct_chars (str): 分割标点符号
             pause_time (float): 停顿时间(秒)
         """
-        # 禁用所有按钮，除了合成按钮（现在是停止按钮）
+        # 禁用UI控件
         self.disableUIControls(True)
-        
-        # 将合成按钮变成停止按钮
         self.infer_btn.setText("停止生成")
         
-        # 检查是否所有指定的角色都存在
+        # 检查所有角色是否存在
         missing_roles = []
         for role_name, _ in role_text_pairs:
             if not self.character_manager.character_exists(role_name):
                 missing_roles.append(role_name)
         
+        # 如果有缺失角色，显示错误并返回
         if missing_roles:
             self.disableUIControls(False)
             self.infer_btn.setText("生成语音")
             missing_roles_str = "、".join(missing_roles)
-            QMessageBox.warning(self, "角色不存在", f"以下角色不存在: {missing_roles_str}\n请先创建这些角色或检查角色名称拼写。")
+            QMessageBox.warning(self, "角色不存在", 
+                               f"以下角色不存在: {missing_roles_str}\n请先创建这些角色或检查角色名称拼写。")
             return
         
-        # 为多角色推理创建一个特殊的推理线程
+        # 生成输出文件名
+        first_role = role_text_pairs[0][0]
+        combined_name = f"{first_role}"
+        if len(role_text_pairs) > 1:
+            combined_name += f"等{len(role_text_pairs)}人对话"
+        
+        timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        output_filename = f"[多角色][{timestamp}]{combined_name}"
+        output_path = os.path.join("outputs", f"{output_filename}.wav")
+        
+        # 创建并启动多角色推理线程
         self.inference_thread = QThread()
         self.inference_worker = MultiRoleInferenceWorker(
             self.tts,
             self.character_manager,
             role_text_pairs,
+            output_path=output_path,
             punct_chars=punct_chars,
             pause_time=pause_time
         )
@@ -842,10 +812,13 @@ class MainWindow(QMainWindow):
         # 连接信号
         self.inference_worker.moveToThread(self.inference_thread)
         self.inference_thread.started.connect(self.inference_worker.run)
+        
+        # 使用相同的信号处理器处理完成和错误信号
         self.inference_worker.finished.connect(self.onInferenceFinished)
         self.inference_worker.progress.connect(self.onInferenceProgress)
         self.inference_worker.error.connect(self.onInferenceError)
-        # 确保推理完成或出错时线程退出
+        
+        # 确保线程正确退出
         self.inference_worker.finished.connect(self.inference_thread.quit)
         self.inference_worker.error.connect(self.inference_thread.quit)
         
