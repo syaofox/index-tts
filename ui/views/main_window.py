@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QThread
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QTextEdit, QComboBox, QFileDialog, QListWidget, 
-    QListWidgetItem, QMessageBox, QSplitter, QStyle, QInputDialog
+    QListWidgetItem, QMessageBox, QSplitter, QStyle, QInputDialog, QCheckBox
 )
 
 from ui.views.audio_player import AudioPlayer
@@ -134,13 +134,9 @@ class MainWindow(QMainWindow):
         text_split_widget = QWidget()
         text_split_layout = QHBoxLayout(text_split_widget)
         
-        # 标点分隔设置
-        self.split_checkbox = QComboBox()
-        self.split_checkbox.addItem("段落分割（默认）", "paragraph")
-        self.split_checkbox.addItem("按标点分割", "punctuation")
+        # 标点分隔设置改为复选框
+        self.split_checkbox = QCheckBox("启用标点分割")
         
-        split_label = QLabel("分割方式:")
-        text_split_layout.addWidget(split_label)
         text_split_layout.addWidget(self.split_checkbox)
         
         # 标点符号设置
@@ -165,7 +161,7 @@ class MainWindow(QMainWindow):
         text_split_layout.addStretch(1)
         
         # 启用/禁用标点设置的联动
-        self.split_checkbox.currentIndexChanged.connect(self.onSplitMethodChanged)
+        self.split_checkbox.stateChanged.connect(self.onSplitMethodChanged)
         
         top_layout.addWidget(text_split_widget)
         
@@ -356,12 +352,16 @@ class MainWindow(QMainWindow):
             else:
                 self.statusBar().showMessage(f"已选择参考音频: {os.path.basename(file_path)}", 3000)
     
-    def onSplitMethodChanged(self, index=None):
+    def onSplitMethodChanged(self, state=None):
         """处理分割方法改变"""
-        split_method = self.split_checkbox.currentData()
+        # 如果state是None，则获取当前选中状态
+        if state is None:
+            state = self.split_checkbox.isChecked()
+            
+        split_method = "punctuation" if state else "paragraph"
         # 启用或禁用标点设置
         is_punct_enabled = split_method == "punctuation"
-        # 启用/禁用标点输入和停顿时间输入
+        # 启用/禁用标点输入
         self.punct_edit.setEnabled(is_punct_enabled)
 
     def startInference(self):
@@ -387,7 +387,7 @@ class MainWindow(QMainWindow):
             return
         
         # 获取分割方式和参数
-        split_method = self.split_checkbox.currentData()
+        split_method = "punctuation" if self.split_checkbox.isChecked() else "paragraph"
         punct_chars = self.punct_edit.toPlainText() if split_method == "punctuation" else ""
         
         # 获取停顿时间并验证

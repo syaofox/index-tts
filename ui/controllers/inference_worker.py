@@ -31,13 +31,37 @@ class InferenceWorker(QObject):
             if not self.output_path:
                 self.output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
             
-            # 根据选择的方法分割文本
+            # 先按段落分割文本
+            self.progress.emit("按段落分割文本...")
+            paragraphs = self.split_text_by_newlines(self.text)
+            
+            # 如果启用了标点分割，则对每个段落再按标点分割
+            segments = []
             if self.split_method == "punctuation" and self.punct_chars:
-                self.progress.emit(f"按标点符号分割文本: {self.punct_chars}...")
-                segments = self.split_text_by_punctuation(self.text, self.punct_chars)
+                self.progress.emit(f"对段落进行标点符号分割: {self.punct_chars}...")
+                for para in paragraphs:
+                    if not para.strip():
+                        segments.append(para)  # 保留空段落，用于添加段落间停顿
+                        continue
+                    # 对非空段落按标点分割
+                    para_segments = self.split_text_by_punctuation(para, self.punct_chars)
+                    segments.extend(para_segments)
+                    # 在每个段落结束后添加一个空字符串，用于段落间停顿
+                    if len(para_segments) > 0:
+                        segments.append("")
+                # 移除最后一个额外的空字符串
+                if segments and not segments[-1].strip():
+                    segments.pop()
             else:
-                self.progress.emit("按段落分割文本...")
-                segments = self.split_text_by_newlines(self.text)
+                segments = paragraphs
+            
+            # 过滤掉连续的空段落
+            filtered_segments = []
+            for i, segment in enumerate(segments):
+                if i > 0 and not segment.strip() and not filtered_segments[-1].strip():
+                    continue  # 跳过连续的空段落
+                filtered_segments.append(segment)
+            segments = filtered_segments
             
             if len(segments) > 1:
                 self.progress.emit(f"共分为 {len(segments)} 个片段进行处理...")
