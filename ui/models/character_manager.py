@@ -5,6 +5,7 @@
 import os
 import time
 import pickle
+import glob
 
 
 class CharacterManager:
@@ -124,17 +125,44 @@ class CharacterManager:
             return False
     
     def get_all_characters(self):
-        """获取所有角色名称列表"""
+        """获取所有角色名称"""
         try:
-            character_names = []
-            for file in os.listdir(self.prompt_dir):
-                if file.endswith(".pickle"):
-                    name = os.path.splitext(file)[0]
-                    character_names.append(name)
-            return character_names
+            # 确保目录存在
+            os.makedirs(self.prompt_dir, exist_ok=True)
+            
+            # 获取所有pickle文件
+            character_files = glob.glob(os.path.join(self.prompt_dir, "*.pickle"))
+            characters = []
+            
+            for file_path in character_files:
+                basename = os.path.basename(file_path)
+                name, _ = os.path.splitext(basename)
+                characters.append(name)
+            
+            return characters
         except Exception as e:
-            print(f"获取角色列表出错: {str(e)}")
+            print(f"获取角色列表出错: {e}")
             return []
+    
+    def character_exists(self, character_name):
+        """
+        检查指定的角色是否存在
+        
+        Args:
+            character_name (str): 角色名称
+            
+        Returns:
+            bool: 如果角色存在则返回True，否则返回False
+        """
+        if not character_name:
+            return False
+            
+        try:
+            file_path = os.path.join(self.prompt_dir, f"{character_name}.pickle")
+            return os.path.exists(file_path)
+        except Exception as e:
+            print(f"检查角色是否存在时出错: {e}")
+            return False
     
     def export_character(self, name, export_path):
         """将角色导出为单独的文件"""

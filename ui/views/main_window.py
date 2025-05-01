@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
-from ui.controllers.inference_worker import InferenceWorker
+from ui.controllers.inference_worker import InferenceWorker, MultiRoleInferenceWorker
 from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH
 
 
@@ -638,6 +638,64 @@ class MainWindow(QMainWindow):
         else:
             self.statusBar().showMessage(f"已加载拖放的参考音频: {os.path.basename(file_path)}", 3000)
     
+    def parseMultiRoleText(self, text):
+        """
+        解析多角色推理文本
+        
+        格式：
+        <角色名1>
+        角色1的文本内容
+        <角色名2>
+        角色2的文本内容
+        
+        Args:
+            text (str): 输入的多角色文本
+            
+        Returns:
+            list: 包含(角色名, 文本内容)元组的列表
+        """
+        lines = text.split("\n")
+        result = []
+        
+        current_role = None
+        current_text = []
+        
+        # 检查文本是否包含角色标记
+        has_role_marker = False
+        for line in lines:
+            line_strip = line.strip()
+            # 检查是否是角色标记行（格式为 <角色名>）
+            if line_strip.startswith("<") and line_strip.endswith(">"):
+                has_role_marker = True
+                break
+        
+        # 如果没有角色标记，作为单角色处理
+        if not has_role_marker:
+            return [(None, text)]
+        
+        # 解析多角色文本
+        for line in lines:
+            line_strip = line.strip()
+            # 检查是否是角色标记行（格式为 <角色名>）
+            if line_strip.startswith("<") and line_strip.endswith(">"):
+                # 如果已有当前角色，保存之前的内容
+                if current_role is not None and current_text:
+                    result.append((current_role, "\n".join(current_text).strip()))
+                    current_text = []
+                
+                # 提取新角色名
+                current_role = line_strip[1:-1].strip()
+            else:
+                # 只有当已经有角色标记时才添加文本
+                if current_role is not None:
+                    current_text.append(line)
+        
+        # 添加最后一个角色的内容
+        if current_role is not None and current_text:
+            result.append((current_role, "\n".join(current_text).strip()))
+        
+        return result
+    
     def startInference(self):
         """开始推理处理"""
         print("开始推理过程...")
@@ -666,11 +724,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "请输入要转换为语音的文本")
             return
         
-        # 获取参考音频路径
-        voice_path = self.ref_audio_player.getAudioPath()
-        if not voice_path:
-            QMessageBox.warning(self, "警告", "请先选择参考音频")
-            return
+        # 解析多角色文本
+        role_text_pairs = self.parseMultiRoleText(text)
         
         # 获取标点符号和停顿时间
         punct_chars = self.punct_edit.toPlainText()
@@ -688,30 +743,95 @@ class MainWindow(QMainWindow):
         self.ref_audio_player.stop()
         self.result_audio_player.stop()
         
+        # 单角色推理 - 原始流程
+        if len(role_text_pairs) == 1 and role_text_pairs[0][0] is None:
+            # 获取参考音频路径
+            voice_path = self.ref_audio_player.getAudioPath()
+            if not voice_path:
+                QMessageBox.warning(self, "警告", "请先选择参考音频")
+                return
+            
+            # 禁用所有按钮，除了合成按钮（现在是停止按钮）
+            self.disableUIControls(True)
+            
+            # 将合成按钮变成停止按钮
+            self.infer_btn.setText("停止生成")
+            self.statusBar().showMessage("正在生成语音...")
+            
+            # 获取当前说话人名称
+            current_index = self.char_combo.currentIndex()
+            speaker_name = self.char_combo.itemData(current_index) if current_index > 0 else "未知说话人"
+            
+            # 创建输出文件名（说话人_文本前50字）
+            filename = self.formatFilename(speaker_name, text)
+            
+            # 创建输出路径
+            output_path = os.path.join("outputs", f"{filename}.wav")
+            
+            # 创建并启动推理线程
+            self.inference_thread = QThread()
+            self.inference_worker = InferenceWorker(
+                self.tts, 
+                voice_path, 
+                text,
+                output_path=output_path,
+                punct_chars=punct_chars,
+                pause_time=pause_time
+            )
+            
+            # 连接信号
+            self.inference_worker.moveToThread(self.inference_thread)
+            self.inference_thread.started.connect(self.inference_worker.run)
+            self.inference_worker.finished.connect(self.onInferenceFinished)
+            self.inference_worker.progress.connect(self.onInferenceProgress)
+            self.inference_worker.error.connect(self.onInferenceError)
+            # 确保推理完成或出错时线程退出
+            self.inference_worker.finished.connect(self.inference_thread.quit)
+            self.inference_worker.error.connect(self.inference_thread.quit)
+            
+            # 启动线程
+            self.inference_thread.start()
+            print(f"推理线程已启动: {self.inference_thread}")
+            
+        # 多角色推理 - 新流程
+        else:
+            # 创建一个新的多角色推理处理器
+            self.handleMultiRoleInference(role_text_pairs, punct_chars, pause_time)
+    
+    def handleMultiRoleInference(self, role_text_pairs, punct_chars, pause_time):
+        """
+        处理多角色推理
+        
+        Args:
+            role_text_pairs (list): 包含(角色名, 文本内容)元组的列表
+            punct_chars (str): 分割标点符号
+            pause_time (float): 停顿时间(秒)
+        """
         # 禁用所有按钮，除了合成按钮（现在是停止按钮）
         self.disableUIControls(True)
         
         # 将合成按钮变成停止按钮
         self.infer_btn.setText("停止生成")
-        self.statusBar().showMessage("正在生成语音...")
         
-        # 获取当前说话人名称
-        current_index = self.char_combo.currentIndex()
-        speaker_name = self.char_combo.itemData(current_index) if current_index > 0 else "未知说话人"
+        # 检查是否所有指定的角色都存在
+        missing_roles = []
+        for role_name, _ in role_text_pairs:
+            if not self.character_manager.character_exists(role_name):
+                missing_roles.append(role_name)
         
-        # 创建输出文件名（说话人_文本前50字）
-        filename = self.formatFilename(speaker_name, text)
+        if missing_roles:
+            self.disableUIControls(False)
+            self.infer_btn.setText("生成语音")
+            missing_roles_str = "、".join(missing_roles)
+            QMessageBox.warning(self, "角色不存在", f"以下角色不存在: {missing_roles_str}\n请先创建这些角色或检查角色名称拼写。")
+            return
         
-        # 创建输出路径
-        output_path = os.path.join("outputs", f"{filename}.wav")
-        
-        # 创建并启动推理线程
+        # 为多角色推理创建一个特殊的推理线程
         self.inference_thread = QThread()
-        self.inference_worker = InferenceWorker(
-            self.tts, 
-            voice_path, 
-            text,
-            output_path=output_path,
+        self.inference_worker = MultiRoleInferenceWorker(
+            self.tts,
+            self.character_manager,
+            role_text_pairs,
             punct_chars=punct_chars,
             pause_time=pause_time
         )
@@ -728,7 +848,8 @@ class MainWindow(QMainWindow):
         
         # 启动线程
         self.inference_thread.start()
-        print(f"推理线程已启动: {self.inference_thread}")
+        self.statusBar().showMessage("正在进行多角色语音生成...")
+        print(f"多角色推理线程已启动: {self.inference_thread}")
     
     def stopInference(self):
         """停止当前正在进行的推理任务"""
