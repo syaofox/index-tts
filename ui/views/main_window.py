@@ -367,8 +367,19 @@ class MainWindow(QMainWindow):
     def startInference(self):
         """开始推理处理"""
         print("开始推理过程...")
+        
         # 检查是否有推理任务正在进行
-        if self.inference_thread and self.inference_thread.isRunning():
+        # 使用更安全的方式检查线程状态，避免访问可能已被删除的对象
+        try:
+            thread_running = self.inference_thread is not None and self.inference_thread.isRunning()
+        except (RuntimeError, ReferenceError):
+            # 如果对象已被删除，将线程引用设为None并继续
+            print("检测到线程对象已被删除，重置引用")
+            self.inference_thread = None
+            self.inference_worker = None
+            thread_running = False
+            
+        if thread_running:
             print(f"推理线程正在运行: {self.inference_thread}")
             QMessageBox.warning(self, "警告", "已有推理任务在进行中，请等待完成")
             return
@@ -428,9 +439,6 @@ class MainWindow(QMainWindow):
         # 确保推理完成或出错时线程退出
         self.inference_worker.finished.connect(self.inference_thread.quit)
         self.inference_worker.error.connect(self.inference_thread.quit)
-        # 清理工作
-        self.inference_worker.finished.connect(self.inference_worker.deleteLater)
-        self.inference_thread.finished.connect(self.inference_thread.deleteLater)
         
         # 启动线程
         self.inference_thread.start()
@@ -450,11 +458,9 @@ class MainWindow(QMainWindow):
         # 刷新历史列表
         self.loadHistoryAudio()
         
-        # 重置线程状态
-        print(f"重置前线程状态: thread={self.inference_thread}, worker={self.inference_worker}")
-        self.inference_thread = None
-        self.inference_worker = None
-        print("线程状态已重置")
+        # 安全重置线程状态
+        print(f"推理完成，开始重置线程状态...")
+        self.safeResetInferenceThread()
     
     def onInferenceProgress(self, message):
         """处理推理进度更新"""
@@ -469,11 +475,9 @@ class MainWindow(QMainWindow):
         
         QMessageBox.critical(self, "错误", error_message)
         
-        # 重置线程状态
-        print(f"重置前线程状态: thread={self.inference_thread}, worker={self.inference_worker}")
-        self.inference_thread = None
-        self.inference_worker = None
-        print("线程状态已重置")
+        # 安全重置线程状态
+        print(f"推理出错，开始重置线程状态...")
+        self.safeResetInferenceThread()
     
     def cleanupOnExit(self):
         """程序退出前清理临时文件"""
@@ -523,4 +527,24 @@ class MainWindow(QMainWindow):
                 if index >= 0:
                     self.char_combo.setCurrentIndex(index)
             else:
-                QMessageBox.warning(self, "导入失败", message) 
+                QMessageBox.warning(self, "导入失败", message)
+    
+    def safeResetInferenceThread(self):
+        """安全地重置推理线程和工作器的状态"""
+        try:
+            # 如果线程还在运行，尝试先退出
+            if self.inference_thread is not None and self.inference_thread.isRunning():
+                print("线程仍在运行，尝试退出...")
+                self.inference_thread.quit()
+                # 等待最多2秒钟线程退出
+                if not self.inference_thread.wait(2000):
+                    print("线程退出超时，尝试强制终止")
+                    self.inference_thread.terminate()
+                    self.inference_thread.wait()
+        except (RuntimeError, ReferenceError) as e:
+            print(f"重置线程时出错: {e}")
+        
+        # 重置引用
+        self.inference_thread = None
+        self.inference_worker = None
+        print("线程状态已安全重置") 
