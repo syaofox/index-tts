@@ -21,7 +21,7 @@ from ui.models.character_manager import CharacterManager
 from ui.utils.text_processor import TextProcessor
 from ui.controllers.single_role_worker import SingleRoleInferenceWorker
 from ui.controllers.multi_role_worker import MultiRoleInferenceWorker
-from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH
+from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH, DEFAULT_PUNCT_CHARS, DEFAULT_PAUSE_TIME
 
 
 class MainWindow(QMainWindow):
@@ -363,7 +363,7 @@ class MainWindow(QMainWindow):
         self.punct_edit = QTextEdit()
         self.punct_edit.setFixedHeight(28)  # 设置为单行高度
         self.punct_edit.setPlaceholderText("例如: 。？！，；")
-        self.punct_edit.setText("。？！")
+        self.punct_edit.setText(DEFAULT_PUNCT_CHARS)
         
         text_split_layout.addWidget(punct_label)
         text_split_layout.addWidget(self.punct_edit)
@@ -372,8 +372,8 @@ class MainWindow(QMainWindow):
         pause_label = QLabel("停顿时间(秒):")
         self.pause_edit = QTextEdit()
         self.pause_edit.setFixedHeight(28)  # 设置为单行高度
-        self.pause_edit.setPlaceholderText("默认: 0.3")
-        self.pause_edit.setText("0.3")
+        self.pause_edit.setPlaceholderText(f"默认: {DEFAULT_PAUSE_TIME}")
+        self.pause_edit.setText(DEFAULT_PAUSE_TIME)
         
         text_split_layout.addWidget(pause_label)
         text_split_layout.addWidget(self.pause_edit)
