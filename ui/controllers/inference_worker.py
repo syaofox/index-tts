@@ -4,6 +4,7 @@
 
 import os
 import time
+import re
 
 from PySide6.QtCore import QObject, Signal
 
@@ -14,6 +15,9 @@ class InferenceWorker(QObject):
     finished = Signal(str)  # 推理完成信号，返回输出文件路径
     progress = Signal(str)  # 进度信号，发送处理状态信息
     error = Signal(str)     # 错误信号
+    
+    # 特殊标记
+    BR_TAG = "<br>"  # 空行标记
 
     def __init__(self, tts, voice_path, text, output_path=None, 
                  split_method="paragraph", punct_chars="。？！", pause_time=0.3):
@@ -31,68 +35,80 @@ class InferenceWorker(QObject):
             if not self.output_path:
                 self.output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
             
-            # 先按段落分割文本
-            self.progress.emit("按段落分割文本...")
-            paragraphs = self.split_text_by_newlines(self.text)
+            # 预处理文本
+            self.progress.emit("预处理文本...")
+            preprocessed_segments = self.preprocess_text(self.text)
+
+            print(preprocessed_segments)
             
-            # 如果启用了标点分割，则对每个段落再按标点分割
-            segments = []
-            if self.split_method == "punctuation" and self.punct_chars:
-                self.progress.emit(f"对段落进行标点符号分割: {self.punct_chars}...")
-                for para in paragraphs:
-                    if not para.strip():
-                        segments.append(para)  # 保留空段落，用于添加段落间停顿
-                        continue
-                    # 对非空段落按标点分割
-                    para_segments = self.split_text_by_punctuation(para, self.punct_chars)
-                    segments.extend(para_segments)
-                    # 在每个段落结束后添加一个空字符串，用于段落间停顿
-                    if len(para_segments) > 0:
-                        segments.append("")
-                # 移除最后一个额外的空字符串
-                if segments and not segments[-1].strip():
-                    segments.pop()
-            else:
-                segments = paragraphs
-            
-            # 过滤掉连续的空段落
-            filtered_segments = []
-            for i, segment in enumerate(segments):
-                if i > 0 and not segment.strip() and not filtered_segments[-1].strip():
-                    continue  # 跳过连续的空段落
-                filtered_segments.append(segment)
-            segments = filtered_segments
-            
-            if len(segments) > 1:
-                self.progress.emit(f"共分为 {len(segments)} 个片段进行处理...")
+            if len(preprocessed_segments) > 1:
+                self.progress.emit(f"共分为 {len(preprocessed_segments)} 个片段进行处理...")
                 temp_outputs = []
+                silence_positions = []  # 记录需要添加静音的位置
                 
-                for i, segment in enumerate(segments):
+                segment_index = 0
+                for i, segment in enumerate(preprocessed_segments):
+                    if segment == self.BR_TAG:  # 处理<br>标记
+                        silence_positions.append(i)
+                        continue
+                    
                     if not segment.strip():  # 跳过空片段
                         continue
-                    temp_path = os.path.join("outputs", f"temp_{int(time.time())}_{i}.wav")
-                    self.progress.emit(f"处理第 {i+1}/{len(segments)} 段...")
+                        
+                    temp_path = os.path.join("outputs", f"temp_{int(time.time())}_{segment_index}.wav")
+                    self.progress.emit(f"处理第 {segment_index+1}/{len(preprocessed_segments) - len(silence_positions)} 段...")
                     self.tts.infer(self.voice_path, segment, temp_path)
-                    temp_outputs.append(temp_path)
+                    temp_outputs.append((i, temp_path))  # 保存原始索引位置和文件路径
+                    segment_index += 1
                 
-                # 合并所有音频片段，并在片段间添加静音
-                self.progress.emit(f"合并音频片段，添加片段间静音 ({self.pause_time}秒)...")
-                self.merge_audio_files_with_silence(temp_outputs, self.output_path, segments)
+                # 合并所有音频片段，包括<br>标记处的静音
+                self.progress.emit(f"合并音频片段，添加段落间静音 ({self.pause_time}秒)...")
+                self.merge_audio_files_with_br(temp_outputs, silence_positions, preprocessed_segments, self.output_path)
                 
                 # 清理临时文件
-                for temp_file in temp_outputs:
+                for _, temp_file in temp_outputs:
                     try:
                         os.remove(temp_file)
                     except:
                         pass
             else:
                 self.progress.emit("开始语音生成...")
-                self.tts.infer(self.voice_path, self.text, self.output_path)
+                # 如果只有一个片段且不是<br>标记，直接处理
+                if preprocessed_segments and preprocessed_segments[0] != self.BR_TAG:
+                    self.tts.infer(self.voice_path, preprocessed_segments[0], self.output_path)
+                else:
+                    # 如果是<br>标记或没有内容，创建静音文件
+                    import torchaudio
+                    silence = self.create_silence(self.pause_time, 44100)  # 使用默认采样率
+                    torchaudio.save(self.output_path, silence, 44100)
             
             self.progress.emit("语音生成完成！")
             self.finished.emit(self.output_path)
         except Exception as e:
             self.error.emit(f"处理过程中出错: {str(e)}")
+    
+    def preprocess_text(self, text):
+        """
+        文本预处理，包括：
+        1. 按段落分割
+        2. 将空行替换为<br>标记
+        3. 对非<br>段落按标点符号分割
+        """
+        self.progress.emit("分割段落并处理空行...")
+        paragraphs = self.split_text_by_newlines_with_br(text)
+        
+        # 对每个段落，如果不是<br>标记，则按标点分割
+        segments = []
+        for para in paragraphs:
+            if para == self.BR_TAG:
+                segments.append(para)
+            else:
+                # 对非空且非<br>的段落按标点分割
+                if para.strip():
+                    para_segments = self.split_text_by_punctuation(para, self.punct_chars)
+                    segments.extend(para_segments)
+        
+        return segments
     
     def split_text_by_punctuation(self, text, punct_chars):
         """按指定的标点符号分割文本"""
@@ -100,8 +116,6 @@ class InferenceWorker(QObject):
             return []
             
         # 构建用于分割的正则表达式
-        # 例如punct_chars为"。？！"时，正则为"([。？！])"
-        import re
         pattern = f"([{re.escape(punct_chars)}])"
         
         # 分割文本
@@ -123,26 +137,39 @@ class InferenceWorker(QObject):
         
         return segments
     
-    def split_text_by_newlines(self, text):
-        """按空行分割文本成多个段落"""
+    def split_text_by_newlines_with_br(self, text):
+        """按空行分割文本成多个段落，并将空行替换为<br>标记"""
         # 首先将文本按行分割
         lines = text.split('\n')
         paragraphs = []
         current_para = []
+        consecutive_empty_lines = 0
         
         # 逐行处理
         for line in lines:
-            if line:  # 非空行
+            if line.strip():  # 非空行
+                # 如果之前有累积的空行，添加<br>标记
+                if consecutive_empty_lines > 0:
+                    # 每个空行对应一个<br>标记
+                    for _ in range(consecutive_empty_lines):
+                        paragraphs.append(self.BR_TAG)
+                    consecutive_empty_lines = 0
+                
                 current_para.append(line)
             else:  # 空行
                 if current_para:  # 如果当前已有段落内容
                     paragraphs.append('\n'.join(current_para))
                     current_para = []
-                paragraphs.append('')  # 添加空段落标记，用于后续添加静音
+                # 累计空行计数
+                consecutive_empty_lines += 1
         
         # 处理最后一个段落
         if current_para:
             paragraphs.append('\n'.join(current_para))
+        
+        # 处理末尾的空行
+        for _ in range(consecutive_empty_lines):
+            paragraphs.append(self.BR_TAG)
         
         return paragraphs
     
@@ -154,6 +181,65 @@ class InferenceWorker(QObject):
         # 创建静音波形 (通道数, 样本数)
         silence = torch.zeros(1, num_samples)
         return silence
+    
+    def merge_audio_files_with_br(self, temp_outputs, silence_positions, segments, output_file):
+        """合并多个音频文件成一个，考虑<br>标记位置添加静音"""
+        import torch
+        import torchaudio
+        
+        # 检查是否有音频文件
+        if not temp_outputs:
+            raise ValueError("没有音频文件可合并")
+        
+        # 先确定采样率
+        _, first_file = temp_outputs[0]
+        waveform, sample_rate = torchaudio.load(first_file)
+        
+        # 创建输出波形列表
+        output_waveforms = []
+        
+        # 按照原始段落索引排序音频文件
+        sorted_outputs = sorted(temp_outputs, key=lambda x: x[0])
+        
+        # 处理所有片段，包括添加<br>对应的静音
+        last_index = -1
+        for segment_index, audio_file in sorted_outputs:
+            # 处理中间的<br>标记
+            for silence_pos in silence_positions:
+                if last_index < silence_pos < segment_index:
+                    # 为每个<br>添加一个静音
+                    silence = self.create_silence(self.pause_time, sample_rate)
+                    output_waveforms.append(silence)
+            
+            # 添加当前段落的音频
+            waveform, sr = torchaudio.load(audio_file)
+            if sr != sample_rate:
+                waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
+            output_waveforms.append(waveform)
+            
+            # 添加静音
+            silence = self.create_silence(self.pause_time, sample_rate)
+            output_waveforms.append(silence)
+            
+
+            # 更新最后处理的索引
+            last_index = segment_index
+        
+        # 处理末尾的<br>标记
+        for silence_pos in silence_positions:
+            if silence_pos > last_index:
+                silence = self.create_silence(self.pause_time, sample_rate)
+                output_waveforms.append(silence)
+        
+        # 检查是否有波形需要合并
+        if not output_waveforms:
+            raise ValueError("没有可合并的音频片段")
+        
+        # 合并所有波形
+        merged_waveform = torch.cat(output_waveforms, dim=1)
+        
+        # 保存合并后的音频
+        torchaudio.save(output_file, merged_waveform, sample_rate)
     
     def merge_audio_files_with_silence(self, input_files, output_file, segments):
         """合并多个音频文件成一个，并在片段间添加静音"""
