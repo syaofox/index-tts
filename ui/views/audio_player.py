@@ -12,8 +12,6 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from ui.views.custom_widgets import ClickableSlider
-
 
 class AudioPlayer(QWidget):
     """音频播放器控件"""
@@ -52,7 +50,7 @@ class AudioPlayer(QWidget):
         
         # 创建播放控制区域
         control_layout = QHBoxLayout()
-        control_layout.setContentsMargins(4, 4, 4, 0)  # 减少边距
+        control_layout.setContentsMargins(4, 4, 4, 4)  # 调整边距
         
         # 音频文件路径标签
         self.pathLabel = QLabel("未选择音频")
@@ -76,21 +74,8 @@ class AudioPlayer(QWidget):
         control_layout.addWidget(self.playPauseBtn)
         control_layout.addWidget(self.timeLabel)
         
-        # 进度条
-        progress_layout = QHBoxLayout()
-        progress_layout.setContentsMargins(4, 0, 4, 4)  # 减少边距
-        
-        # 使用自定义的可点击进度条
-        self.progressSlider = ClickableSlider(Qt.Orientation.Horizontal)
-        self.progressSlider.setEnabled(False)
-        self.progressSlider.sliderMoved.connect(self.setPosition)
-        self.progressSlider.setFixedHeight(16)
-        
-        progress_layout.addWidget(self.progressSlider)
-        
         # 添加布局
         main_layout.addLayout(control_layout)
-        main_layout.addLayout(progress_layout)
         
         # 波形图区域
         try:
@@ -103,17 +88,20 @@ class AudioPlayer(QWidget):
             
             # 创建波形图小部件
             self.waveformPlot = pg.PlotWidget(background='w')  # 使用命名参数
-            self.waveformPlot.setFixedHeight(80)  # 增加高度使波形更明显
-            self.waveformPlot.setMouseEnabled(x=False, y=False)  # 禁用鼠标交互
+            self.waveformPlot.setFixedHeight(100)  # 增加高度使波形更明显，由于移除了进度条，可以增加波形图高度
+            self.waveformPlot.setMouseEnabled(x=True, y=False)  # 启用X轴方向的鼠标交互
             self.waveformPlot.hideAxis('left')  # 隐藏Y轴
             self.waveformPlot.hideAxis('bottom')  # 隐藏X轴
             self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
-            self.waveformPlot.setMinimumHeight(80)  # 确保有最小高度
+            self.waveformPlot.setMinimumHeight(100)  # 确保有最小高度
             
             # 初始化波形图数据 - 使用淡灰色
             self.waveformCurve = self.waveformPlot.plot([], [], pen=pg.mkPen(color=(200, 200, 200), width=1.5))
             self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color='red', width=1.5))
             self.waveformPlot.addItem(self.positionLine)
+            
+            # 添加波形图点击事件处理
+            self.waveformPlot.scene().sigMouseClicked.connect(self.onWaveformClicked)
             
             # 添加到主布局
             main_layout.addWidget(self.waveformPlot)
@@ -137,6 +125,36 @@ class AudioPlayer(QWidget):
             traceback.print_exc()
         
         self.setLayout(main_layout)
+    
+    def onWaveformClicked(self, event):
+        """处理波形图点击事件，跳转到对应位置"""
+        if not self.has_pyqtgraph or self.waveformCurve is None or self.duration <= 0:
+            return
+            
+        try:
+            # 获取点击位置对应的x坐标
+            pos = self.waveformPlot.plotItem.vb.mapSceneToView(event.scenePos())
+            x_pos = pos.x()
+            
+            # 获取波形图的x轴范围
+            curve_data = self.waveformCurve.getData()
+            if curve_data and len(curve_data[0]) > 0:
+                max_x = curve_data[0][-1]
+                
+                # 确保位置在有效范围内
+                x_pos = max(0, min(x_pos, max_x))
+                
+                # 计算对应的音频位置（毫秒）
+                position_ratio = x_pos / max_x
+                position_ms = int(position_ratio * self.duration)
+                
+                # 设置播放位置
+                self.mediaPlayer.setPosition(position_ms)
+                
+                print(f"波形图点击位置: {x_pos}, 对应音频位置: {position_ms}ms")
+        except Exception as e:
+            print(f"处理波形图点击事件出错: {str(e)}")
+            traceback.print_exc()
     
     def keyPressEvent(self, event):
         """处理键盘事件"""
@@ -172,7 +190,6 @@ class AudioPlayer(QWidget):
             self.mediaPlayer.setSource(QUrl.fromLocalFile(file_path))
             self.pathLabel.setText(os.path.basename(file_path))
             self.playPauseBtn.setEnabled(True)  # 启用播放按钮
-            self.progressSlider.setEnabled(True)  # 启用进度条
             
             # 加载并显示波形图
             self.loadWaveform(file_path)
@@ -349,7 +366,6 @@ class AudioPlayer(QWidget):
         self.mediaPlayer.setSource(QUrl())
         self.pathLabel.setText("未选择音频")
         self.playPauseBtn.setEnabled(False)
-        self.progressSlider.setEnabled(False)
         self.timeLabel.setText("00:00 / 00:00")
         
         # 恢复播放图标
@@ -393,10 +409,7 @@ class AudioPlayer(QWidget):
             self.playPauseBtn.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
     
     def onPositionChanged(self, position):
-        """当播放位置变化时更新进度条和时间标签"""
-        # 更新进度条
-        self.progressSlider.setValue(position)
-        
+        """当播放位置变化时更新时间标签和波形图位置线"""
         # 更新时间标签
         current = self.formatTime(position)
         total = self.formatTime(self.duration)
@@ -417,18 +430,13 @@ class AudioPlayer(QWidget):
                 print(f"更新波形图位置线出错: {str(e)}")
     
     def onDurationChanged(self, duration):
-        """当音频时长变化时更新进度条"""
+        """当音频时长变化时更新时间标签"""
         self.duration = duration
-        self.progressSlider.setRange(0, duration)
         
         # 更新时间标签
         current = self.formatTime(self.mediaPlayer.position())
         total = self.formatTime(duration)
         self.timeLabel.setText(f"{current} / {total}")
-    
-    def setPosition(self, position):
-        """设置播放位置（由进度条拖动触发）"""
-        self.mediaPlayer.setPosition(position)
     
     def formatTime(self, ms):
         """将毫秒转换为 mm:ss 格式"""
