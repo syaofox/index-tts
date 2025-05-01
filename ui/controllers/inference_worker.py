@@ -105,6 +105,57 @@ class InferenceWorker(QObject):
         """请求停止推理过程"""
         self._stop_requested = True
         self.progress.emit("正在停止推理过程...")
+    
+    def save_partial_output(self, temp_outputs, silence_positions, preprocessed_segments):
+        """尝试保存部分处理结果，成功则返回True，失败返回False"""
+        if not temp_outputs:
+            return False
+            
+        self.progress.emit("正在合并已生成的部分内容...")
+        try:
+            # 合并现有的音频片段
+            partial_output_path = os.path.join("outputs", f"partial_spk_{int(time.time())}.wav")
+            self.progress.emit(f"正在合并 {len(temp_outputs)} 个已生成的片段...")
+            self.merge_audio_files_with_br(temp_outputs, silence_positions, preprocessed_segments, partial_output_path)
+            
+            # 清理临时文件
+            self.progress.emit("正在清理临时文件...")
+            for _, temp_file in temp_outputs:
+                try:
+                    os.remove(temp_file)
+                except:
+                    pass
+                    
+            self.progress.emit(f"已成功保存部分结果到: {os.path.basename(partial_output_path)}")
+            self.finished.emit(partial_output_path)
+            return True
+        except Exception as e:
+            print(f"合并部分结果出错: {str(e)}")
+            # 如果合并失败，仍然尝试保留最后一个生成的片段
+            if temp_outputs:
+                last_file = temp_outputs[-1][1]
+                partial_output_path = os.path.join("outputs", f"partial_spk_{int(time.time())}.wav")
+                try:
+                    self.progress.emit("合并失败，尝试保存最后生成的片段...")
+                    import shutil
+                    shutil.copy(last_file, partial_output_path)
+                    
+                    # 清理临时文件(除了最后一个)
+                    self.progress.emit("正在清理临时文件...")
+                    for _, temp_file in temp_outputs:
+                        if temp_file != last_file:  # 不删除最后一个文件
+                            try:
+                                os.remove(temp_file)
+                            except:
+                                pass
+                    
+                    self.progress.emit(f"已保存部分结果: {os.path.basename(partial_output_path)}")
+                    self.finished.emit(partial_output_path)
+                    return True
+                except Exception as e2:
+                    print(f"保存最后一个片段出错: {str(e2)}")
+        
+        return False
 
     def run(self):
         try:
@@ -131,12 +182,11 @@ class InferenceWorker(QObject):
                 for i, segment in enumerate(preprocessed_segments):
                     # 检查是否请求停止
                     if self._stop_requested:
-                        # 清理已生成的临时文件
-                        for _, temp_file in temp_outputs:
-                            try:
-                                os.remove(temp_file)
-                            except:
-                                pass
+                        # 尝试保存部分结果
+                        if self.save_partial_output(temp_outputs, silence_positions, preprocessed_segments):
+                            return
+                        
+                        # 如果无法保存部分结果，则报告中断
                         self.error.emit("推理已被用户中断")
                         return
                     
@@ -155,12 +205,11 @@ class InferenceWorker(QObject):
                 
                 # 检查是否请求停止
                 if self._stop_requested:
-                    # 清理临时文件
-                    for _, temp_file in temp_outputs:
-                        try:
-                            os.remove(temp_file)
-                        except:
-                            pass
+                    # 尝试保存部分结果
+                    if self.save_partial_output(temp_outputs, silence_positions, preprocessed_segments):
+                        return
+                    
+                    # 如果无法保存部分结果，则报告中断
                     self.error.emit("推理已被用户中断")
                     return
                 
@@ -192,13 +241,12 @@ class InferenceWorker(QObject):
             
             # 最后检查一次是否请求停止
             if self._stop_requested:
-                # 尝试删除输出文件，因为它可能是不完整的
-                try:
-                    if os.path.exists(self.output_path):
-                        os.remove(self.output_path)
-                except:
-                    pass
-                self.error.emit("推理已被用户中断")
+                # 检查输出文件是否已经存在且有效
+                if os.path.exists(self.output_path) and os.path.getsize(self.output_path) > 0:
+                    self.progress.emit("已保存部分结果")
+                    self.finished.emit(self.output_path)
+                else:
+                    self.error.emit("推理已被用户中断")
                 return
             
             self.progress.emit("语音生成完成！")

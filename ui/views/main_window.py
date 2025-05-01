@@ -485,7 +485,13 @@ class MainWindow(QMainWindow):
         print(f"推理完成，输出路径: {output_path}")
         # 更新界面
         self.infer_btn.setText("生成语音")
-        self.statusBar().showMessage("语音生成完成", 5000)
+        
+        # 检查是否为部分结果
+        is_partial = "partial" in os.path.basename(output_path).lower()
+        if is_partial:
+            self.statusBar().showMessage("用户中断，已保存部分生成结果", 5000)
+        else:
+            self.statusBar().showMessage("语音生成完成", 5000)
         
         # 启用所有按钮
         self.disableUIControls(False)
@@ -508,13 +514,14 @@ class MainWindow(QMainWindow):
         """处理推理错误"""
         print(f"推理出错: {error_message}")
         self.infer_btn.setText("生成语音")
-        self.statusBar().showMessage("生成失败", 5000)
         
         # 启用所有按钮
         self.disableUIControls(False)
         
         # 如果不是用户主动中断，则显示错误消息
+        # 注意：部分结果会通过onInferenceFinished处理，而不会调用此方法
         if error_message != "推理已被用户中断":
+            self.statusBar().showMessage("生成失败", 5000)
             QMessageBox.critical(self, "错误", error_message)
         else:
             self.statusBar().showMessage("用户已中断语音生成", 5000)
