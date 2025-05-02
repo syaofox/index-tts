@@ -9,10 +9,12 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QMainWindow, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, 
     QPushButton, QLabel, QTextEdit, QComboBox, QFileDialog, QListWidget, 
-    QListWidgetItem, QMessageBox, QSplitter, QStyle, QInputDialog, QCheckBox
+    QListWidgetItem, QMessageBox, QSplitter, QStyle, QInputDialog, QCheckBox,
+    QMenu
 )
 
 from ui.views.audio_player import AudioPlayer
@@ -350,6 +352,10 @@ class MainWindow(QMainWindow):
         self.text_edit.setPlaceholderText("在此输入要转换为语音的文本...")
         # 设置默认最小高度为5行文本高度（大约每行20像素）
         self.text_edit.setMinimumHeight(100)
+        
+        # 添加右键菜单
+        self.text_edit.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.text_edit.customContextMenuRequested.connect(self.showTextEditContextMenu)
         
         top_layout.addWidget(text_label)
         top_layout.addWidget(self.text_edit)
@@ -1045,4 +1051,60 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"加载替换规则出错: {str(e)}")
         
-        return replace_rules 
+        return replace_rules
+    
+    def showTextEditContextMenu(self, position):
+        """显示文本编辑器的自定义右键菜单"""
+        context_menu = self.text_edit.createStandardContextMenu()
+        
+        # 添加分隔线
+        context_menu.addSeparator()
+        
+        # 创建插入角色子菜单
+        characters_menu = QMenu("插入角色", self)
+        
+        # 获取所有角色
+        characters = self.character_manager.get_all_characters()
+        
+        if characters:
+            # 按字母顺序排序角色
+            characters.sort()
+            
+            # 添加角色到子菜单
+            for char_name in characters:
+                action = QAction(char_name, self)
+                # 使用lambda函数时，必须使用name=char_name传递参数，否则所有动作都会使用最后一个char_name值
+                action.triggered.connect(lambda checked, name=char_name: self.insertCharacterTag(name))
+                characters_menu.addAction(action)
+        else:
+            # 如果没有角色，则添加禁用的菜单项
+            no_chars_action = QAction("无可用角色", self)
+            no_chars_action.setEnabled(False)
+            characters_menu.addAction(no_chars_action)
+        
+        # 添加插入角色子菜单到上下文菜单
+        context_menu.addMenu(characters_menu)
+        
+        # 显示上下文菜单
+        context_menu.exec(self.text_edit.mapToGlobal(position))
+    
+    def insertCharacterTag(self, character_name):
+        """在文本编辑器中插入角色标签"""
+        # 获取当前光标位置
+        cursor = self.text_edit.textCursor()
+        
+        # 获取当前光标所在行的文本
+        cursor.select(cursor.SelectionType.LineUnderCursor)
+        line_text = cursor.selectedText()
+        
+        # 确保当前位置处于行首或在一个空行，以便正确插入角色标签
+        # 如果当前行不为空且光标不在行首，则先插入一个换行
+        if line_text.strip() and not cursor.atBlockStart():
+            cursor.clearSelection()
+            cursor.insertText("\n")
+        
+        # 插入角色标签
+        cursor.insertText(f"<{character_name}>\n")
+        
+        # 设置焦点回到文本编辑器
+        self.text_edit.setFocus() 
