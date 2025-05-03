@@ -1,27 +1,22 @@
-"""多角色推理工作线程
+"""多角色推理模块
 提供多角色TTS推理的功能。
 """
 
 import os
-import time
-import uuid
-import traceback
 import shutil
 from typing import List, Tuple, Optional
 
-from PySide6.QtCore import QMutex, QWaitCondition
 from ui.controllers.inference_base import InferenceBase
-from ui.controllers.single_role_worker import SingleRoleInferenceWorker
-from ui.utils.text_processor import TextProcessor
+from ui.controllers.single_role_inference import SingleRoleInference
 
 
-class MultiRoleInferenceWorker(InferenceBase):
-    """多角色推理工作线程类"""
+class MultiRoleInference(InferenceBase):
+    """多角色推理类"""
     
     def __init__(self, tts, character_manager, role_text_pairs, 
                  output_path=None, punct_chars="。？！", pause_time=0.3, replace_rules=None, infer_mode="normal"):
         """
-        初始化多角色推理工作器
+        初始化多角色推理器
         
         Args:
             tts: TTS模型对象
@@ -38,8 +33,6 @@ class MultiRoleInferenceWorker(InferenceBase):
         self.role_text_pairs = role_text_pairs
         self.replace_rules = replace_rules or []
         self.infer_mode = infer_mode
-        
-        # 临时目录已在基类中创建，这里不需要重复创建
     
     def process_inference(self) -> Tuple[bool, Optional[str]]:
         """
@@ -55,7 +48,7 @@ class MultiRoleInferenceWorker(InferenceBase):
                 return False, None
             
             # 检查所有角色是否存在
-            missing_roles = self.check_roles_exist()
+            missing_roles = self._check_roles_exist()
             if missing_roles:
                 self.error.emit(f"以下角色不存在: {', '.join(missing_roles)}")
                 return False, None
@@ -79,7 +72,7 @@ class MultiRoleInferenceWorker(InferenceBase):
                 self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})，使用{self.infer_mode}模式")
                 
                 # 处理当前角色
-                audio_file = self.process_single_role(role_name, text, i)
+                audio_file = self._process_single_role(role_name, text, i)
                 if audio_file and os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
                     audio_files.append(audio_file)
             
@@ -99,7 +92,7 @@ class MultiRoleInferenceWorker(InferenceBase):
             self.progress.emit(f"正在合并 {len(audio_files)} 个角色的音频文件...")
             
             # 尝试合并音频
-            merged_file = self.merge_all_audio_files(audio_files)
+            merged_file = self._merge_all_audio_files(audio_files)
             
             # 清理临时目录
             self.cleanup_temp_files()
@@ -113,11 +106,11 @@ class MultiRoleInferenceWorker(InferenceBase):
             return True, merged_file
             
         except Exception as e:
-            error_msg = self.handle_exception(e, "多角色推理")
+            self.handle_exception(e, "多角色推理")
             self.cleanup_temp_files()
             return False, None
     
-    def check_roles_exist(self) -> List[str]:
+    def _check_roles_exist(self) -> List[str]:
         """
         检查所有角色是否存在
         
@@ -130,7 +123,7 @@ class MultiRoleInferenceWorker(InferenceBase):
                 missing_roles.append(role_name)
         return missing_roles
     
-    def process_single_role(self, role_name: str, text: str, index: int) -> Optional[str]:
+    def _process_single_role(self, role_name: str, text: str, index: int) -> Optional[str]:
         """
         处理单个角色的推理
         
@@ -161,23 +154,23 @@ class MultiRoleInferenceWorker(InferenceBase):
             # 为当前角色生成一个临时输出文件
             role_output_path = self.create_temp_file_path(f"{role_name}_{index}")
             
-            # 创建单角色推理工作器，但不要启动新线程
-            worker = SingleRoleInferenceWorker(
+            # 创建单角色推理器，但不要启动新线程
+            inference = SingleRoleInference(
                 self.tts,
                 voice_path,
                 text,
                 output_path=role_output_path,
                 punct_chars=self.punct_chars,
                 pause_time=self.pause_time,
-                replace_rules=self.replace_rules,  # 传递替换规则
-                infer_mode=self.infer_mode  # 传递推理模式
+                replace_rules=self.replace_rules,
+                infer_mode=self.infer_mode
             )
             
             # 连接进度信号，添加角色名前缀
-            worker.progress.connect(lambda msg, name=role_name: self.progress.emit(f"[{name}] {msg}"))
+            inference.progress.connect(lambda msg, name=role_name: self.progress.emit(f"[{name}] {msg}"))
             
             # 同步执行推理
-            success, output_file = worker.process_inference()
+            success, output_file = inference.process_inference()
             
             if not success or not output_file:
                 self.error.emit(f"处理角色 '{role_name}' 的文本时出错")
@@ -190,10 +183,10 @@ class MultiRoleInferenceWorker(InferenceBase):
             return output_file
             
         except Exception as e:
-            error_msg = self.handle_exception(e, f"处理角色 '{role_name}' 的推理")
+            self.handle_exception(e, f"处理角色 '{role_name}' 的推理")
             return None
     
-    def merge_all_audio_files(self, audio_files: List[str]) -> Optional[str]:
+    def _merge_all_audio_files(self, audio_files: List[str]) -> Optional[str]:
         """
         合并所有角色的音频文件
         
@@ -227,7 +220,7 @@ class MultiRoleInferenceWorker(InferenceBase):
             return merged_file
             
         except Exception as e:
-            error_msg = self.handle_exception(e, "合并音频文件")
+            self.handle_exception(e, "合并音频文件")
             
             # 保存第一个角色的音频作为输出
             if audio_files and os.path.exists(audio_files[0]):
@@ -238,14 +231,4 @@ class MultiRoleInferenceWorker(InferenceBase):
                 except Exception as copy_error:
                     self.error.emit(f"保存单个角色音频失败: {str(copy_error)}")
             
-            return None
-    
-    def cleanup_temp_files(self):
-        """清理临时文件和目录"""
-        try:
-            self.progress.emit("清理临时文件...")
-            if os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except Exception as e:
-            print(f"清理临时文件时出错: {str(e)}")
-            # 不抛出异常，因为这只是清理操作 
+            return None 

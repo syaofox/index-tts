@@ -1,29 +1,27 @@
-"""推理工作基类
-提供TTS推理的基础抽象类及公共功能。
+"""推理工作线程基类
+为各种推理工作器提供基础功能和通用方法。
 """
 
 import os
 import time
+import uuid
+import traceback
+from typing import List, Tuple, Dict, Optional, Any
+
 import torch
 import torchaudio
-import tempfile
-import uuid
-import shutil
-import traceback
-from abc import abstractmethod
-from typing import List, Tuple, Optional, Dict, Any, Union
+from PySide6.QtCore import QObject, Signal
 
-from PySide6.QtCore import QObject, Signal, QMutex, QWaitCondition
+from ui.utils.text_processor import TextProcessor
 
 
-# 解决方案：创建一个自定义元类来解决冲突
 class InferenceBase(QObject):
-    """推理工作基类，提供统一的接口和公共方法"""
+    """所有推理工作器的基类，提供共用功能"""
     
     # 定义信号
-    finished = Signal(str)   # 推理完成信号，返回输出文件路径
-    progress = Signal(str)   # 进度信号
-    error = Signal(str)      # 错误信号
+    finished = Signal(str)  # 推理完成信号，返回输出文件路径
+    progress = Signal(str)  # 进度信号，发送处理状态信息
+    error = Signal(str)     # 错误信号
     
     # 特殊标记
     BR_TAG = "<br>"  # 空行标记
@@ -34,7 +32,7 @@ class InferenceBase(QObject):
         
         Args:
             tts: TTS模型对象
-            output_path: 输出音频文件路径，如果为None则自动生成
+            output_path: 输出音频路径，如果为None则使用默认路径
             punct_chars: 分割文本的标点符号
             pause_time: 段落间停顿时间(秒)
         """
@@ -44,114 +42,137 @@ class InferenceBase(QObject):
         self.punct_chars = punct_chars
         self.pause_time = pause_time
         
-        # 停止标志及同步控制
+        # 停止标志
         self._stop_requested = False
-        self._mutex = QMutex()
-        self._condition = QWaitCondition()
         
-        # 创建临时目录
+        # 创建唯一的临时目录
         self.temp_dir = os.path.join("outputs", "temp", str(uuid.uuid4()))
+        self.ensure_dir_exists(self.temp_dir)
     
     def stop(self):
         """请求停止推理过程"""
-        self._mutex.lock()
         self._stop_requested = True
-        self._mutex.unlock()
-        self._condition.wakeAll()
         self.progress.emit("正在停止推理过程...")
     
     def is_stop_requested(self):
         """检查是否请求停止推理"""
-        self._mutex.lock()
-        result = self._stop_requested
-        self._mutex.unlock()
-        return result
+        return self._stop_requested
     
-    def run(self):
+    def generate_output_path(self) -> str:
         """
-        执行推理任务，在单独线程中运行
-        此方法会被QThread调用
-        """
-        try:
-            success, output_file = self.process_inference()
-            
-            # 发送完成信号
-            if success and output_file:
-                self.finished.emit(output_file)
-            else:
-                if self.is_stop_requested():
-                    self.error.emit("推理已被用户中断")
-                else:
-                    self.error.emit("语音生成失败")
-                
-        except Exception as e:
-            error_msg = f"推理出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
-    
-    def generate_output_path(self):
-        """生成默认输出路径"""
-        if not self.output_path:
-            # 创建输出目录（如果不存在）
-            output_dir = "outputs"
-            self.ensure_dir_exists(output_dir)
-            
-            # 生成带时间戳的文件名
-            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-            self.output_path = os.path.join(output_dir, f"output_{timestamp}.wav")
-        
-        # 确保输出目录存在
-        self.ensure_dir_exists(os.path.dirname(self.output_path))
-        return self.output_path
-    
-    @abstractmethod
-    def process_inference(self):
-        """
-        处理推理任务，需要被子类实现
+        生成默认输出路径
         
         Returns:
-            tuple: (success, output_file_path)
-                success (bool): 是否成功完成推理
-                output_file_path (str): 输出音频文件路径，如果处理失败则为None
+            str: 生成的输出文件路径
         """
-        pass
+        # 创建输出目录（如果不存在）
+        output_dir = "outputs"
+        self.ensure_dir_exists(output_dir)
+        
+        # 为输出文件生成一个带时间戳的文件名
+        timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        return os.path.join(output_dir, f"output_{timestamp}.wav")
+    
+    def create_temp_file_path(self, suffix) -> str:
+        """
+        创建临时文件路径
+        
+        Args:
+            suffix: 文件名后缀
+            
+        Returns:
+            str: 临时文件路径
+        """
+        # 确保临时目录存在
+        self.ensure_dir_exists(self.temp_dir)
+        
+        # 生成唯一的临时文件名
+        file_name = f"temp_{int(time.time())}_{uuid.uuid4().hex[:8]}_{suffix}.wav"
+        return os.path.join(self.temp_dir, file_name)
     
     def ensure_dir_exists(self, dir_path):
-        """确保目录存在，如果不存在则创建"""
+        """
+        确保目录存在，如果不存在则创建
+        
+        Args:
+            dir_path: 目录路径
+        """
         if dir_path and not os.path.exists(dir_path):
             os.makedirs(dir_path, exist_ok=True)
     
-    @staticmethod
-    def merge_audio_files(audio_files, output_path, channels=1):
+    def cleanup_temp_files(self):
+        """清理临时文件和目录"""
+        try:
+            self.progress.emit("清理临时文件...")
+            if os.path.exists(self.temp_dir):
+                import shutil
+                shutil.rmtree(self.temp_dir, ignore_errors=True)
+        except Exception as e:
+            print(f"清理临时文件时出错: {str(e)}")
+    
+    def handle_exception(self, e, context="推理"):
         """
-        合并多个WAV音频文件
+        统一处理异常
         
         Args:
-            audio_files (list): 要合并的WAV文件路径列表
-            output_path (str): 合并后的输出文件路径
-            channels (int): 音频通道数
+            e: 异常对象
+            context: 上下文描述
+            
+        Returns:
+            str: 错误消息
+        """
+        error_msg = f"{context}时出错: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        self.error.emit(f"{context}失败: {str(e)}")
+        return error_msg
+    
+    def create_silence(self, duration, sample_rate, num_channels=1):
+        """
+        创建指定时长的静音
+        
+        Args:
+            duration: 静音时长(秒)
+            sample_rate: 采样率
+            num_channels: 声道数
+            
+        Returns:
+            torch.Tensor: 静音波形
+        """
+        # 计算样本数
+        num_samples = int(duration * sample_rate)
+        # 创建静音波形 (通道数, 样本数)
+        silence = torch.zeros(num_channels, num_samples)
+        return silence
+    
+    def merge_audio_files(self, input_files, output_path):
+        """
+        合并多个音频文件成一个
+        
+        Args:
+            input_files: 输入音频文件路径列表
+            output_path: 输出音频文件路径
             
         Returns:
             str: 合并后的文件路径，如果失败则返回None
         """
-        if not audio_files:
+        if not input_files:
             return None
         
         try:
             # 如果只有一个文件，直接复制
-            if len(audio_files) == 1:
+            if len(input_files) == 1:
                 from shutil import copy2
-                copy2(audio_files[0], output_path)
+                copy2(input_files[0], output_path)
                 return output_path
             
             # 读取第一个文件以获取采样率
-            waveform, sample_rate = torchaudio.load(audio_files[0])
+            waveform, sample_rate = torchaudio.load(input_files[0])
             
             # 创建一个列表用于存储所有音频片段
             waveforms = []
             
             # 依次读取每个文件并添加到列表
-            for file_path in audio_files:
+            for file_path in input_files:
                 # 检查文件是否存在且有效
                 if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
                     print(f"警告: 跳过不存在或空的文件 {file_path}")
@@ -167,13 +188,13 @@ class InferenceBase(QObject):
                         current_waveform = resampler(current_waveform)
                     
                     # 确保声道数一致
-                    if current_waveform.shape[0] != channels:
-                        if current_waveform.shape[0] < channels:
+                    if current_waveform.shape[0] != waveform.shape[0]:
+                        if current_waveform.shape[0] < waveform.shape[0]:
                             # 如果声道数少，复制声道
-                            current_waveform = current_waveform.repeat(channels, 1)
+                            current_waveform = current_waveform.repeat(waveform.shape[0], 1)
                         else:
                             # 如果声道数多，只保留需要的声道数
-                            current_waveform = current_waveform[:channels, :]
+                            current_waveform = current_waveform[:waveform.shape[0], :]
                     
                     # 添加到列表
                     waveforms.append(current_waveform)
@@ -198,38 +219,18 @@ class InferenceBase(QObject):
             return output_path
         
         except Exception as e:
-            import traceback
             error_msg = f"合并音频文件时出错: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
             return None
     
-    @staticmethod
-    def create_silence(duration, sample_rate=44100, channels=1):
-        """
-        创建指定时长的静音
-        
-        Args:
-            duration (float): 静音时长，以秒为单位
-            sample_rate (int): 采样率
-            channels (int): 音频通道数
-            
-        Returns:
-            torch.Tensor: 静音波形
-        """
-        # 计算样本数
-        num_samples = int(duration * sample_rate)
-        # 创建静音波形 (通道数, 样本数)
-        silence = torch.zeros(channels, num_samples)
-        return silence
-        
     def merge_audio_files_with_silence(self, temp_outputs, silence_positions, output_path):
         """
-        合并音频文件，在指定位置添加静音
+        合并多个音频文件，在段落间添加静音
         
         Args:
-            temp_outputs (list): 临时输出文件列表，格式为[(index, file_path), ...]
-            silence_positions (list): 静音位置列表
-            output_path (str): 输出文件路径
+            temp_outputs: 临时输出文件列表，格式为[(index, file_path), ...]
+            silence_positions: 静音位置列表
+            output_path: 输出文件路径
         """
         # 检查是否有音频文件
         if not temp_outputs:
@@ -248,11 +249,6 @@ class InferenceBase(QObject):
         # 按照原始段落索引排序音频文件
         sorted_outputs = sorted(temp_outputs, key=lambda x: x[0])
         
-        # 添加额外的调试信息
-        print(f"处理 {len(sorted_outputs)} 个音频片段和 {len(silence_positions)} 个空行位置")
-        print(f"音频索引: {[idx for idx, _ in sorted_outputs]}")
-        print(f"静音位置: {silence_positions}")
-        
         # 处理所有片段，包括添加<br>对应的静音
         last_index = -1
         
@@ -265,16 +261,11 @@ class InferenceBase(QObject):
                 output_waveforms.append(short_silence)
             
             # 处理<br>标记的长静音（处理当前段落之前的所有<br>）
-            br_count = 0
             for silence_pos in silence_positions:
                 if last_index < silence_pos < segment_index:
-                    br_count += 1
                     # 为每个<br>添加一个完整静音
                     silence = self.create_silence(self.pause_time, sample_rate, waveform.shape[0])
                     output_waveforms.append(silence)
-            
-            if br_count > 0:
-                print(f"在段落 {segment_index} 之前添加了 {br_count} 个空行静音")
             
             # 确保文件存在
             if not os.path.exists(audio_file):
@@ -295,8 +286,6 @@ class InferenceBase(QObject):
                         audio_waveform = audio_waveform[:waveform.shape[0], :]
                         
                 output_waveforms.append(audio_waveform)
-                silence = self.create_silence(self.pause_time, sample_rate, waveform.shape[0])
-                output_waveforms.append(silence)
             except Exception as e:
                 print(f"加载音频文件出错: {str(e)}")
                 continue
@@ -305,16 +294,11 @@ class InferenceBase(QObject):
             last_index = segment_index
         
         # 处理末尾的<br>标记
-        end_br_count = 0
         for silence_pos in silence_positions:
             if silence_pos > last_index:
-                end_br_count += 1
                 silence = self.create_silence(self.pause_time, sample_rate, waveform.shape[0])
                 output_waveforms.append(silence)
         
-        if end_br_count > 0:
-            print(f"在最后添加了 {end_br_count} 个空行静音")
-            
         # 检查是否有波形需要合并
         if not output_waveforms:
             raise ValueError("没有可合并的音频片段")
@@ -327,15 +311,15 @@ class InferenceBase(QObject):
         
         # 保存合并后的音频
         torchaudio.save(output_path, merged_waveform, sample_rate)
-        
+    
     def save_partial_output(self, temp_outputs, silence_positions, segments) -> Optional[str]:
         """
         尝试保存部分处理结果
         
         Args:
-            temp_outputs (list): 临时输出文件列表，格式为[(index, file_path), ...]
-            silence_positions (list): 静音位置列表
-            segments (list): 文本段落列表
+            temp_outputs: 临时输出文件列表，格式为[(index, file_path), ...]
+            silence_positions: 静音位置列表
+            segments: 文本段落列表
             
         Returns:
             str: 保存的文件路径，如果失败则返回None
@@ -399,58 +383,99 @@ class InferenceBase(QObject):
         
         return None
     
-    def cleanup_temp_files(self, temp_dir=None):
+    # 模板方法，定义了整体推理流程，子类需要实现具体推理方法
+    def run(self):
         """
-        清理临时文件和目录
-        
-        Args:
-            temp_dir (str, optional): 要清理的临时目录，如果为None则使用self.temp_dir
+        执行推理任务，该方法在单独的线程中运行
+        使用模板方法模式，定义整体流程
         """
         try:
-            self.progress.emit("清理临时文件...")
-            dir_to_clean = temp_dir or self.temp_dir
-            if os.path.exists(dir_to_clean):
-                shutil.rmtree(dir_to_clean, ignore_errors=True)
+            success, output_file = self.process_inference()
+            
+            # 发送完成信号
+            if success and output_file:
+                self.finished.emit(output_file)
+            else:
+                if self.is_stop_requested():
+                    self.error.emit("推理已被用户中断")
+                else:
+                    self.error.emit("语音生成失败")
+                
         except Exception as e:
-            print(f"清理临时文件时出错: {str(e)}")
-            # 不抛出异常，因为这只是清理操作
+            self.handle_exception(e, "执行推理任务")
     
-    def create_temp_file_path(self, segment_index=None):
+    def process_inference(self) -> Tuple[bool, Optional[str]]:
         """
-        创建临时文件路径
+        处理推理任务，子类必须实现此方法
+        
+        Returns:
+            tuple: (success, output_file_path)
+        """
+        raise NotImplementedError("子类必须实现process_inference方法")
+
+
+# 推理策略类，用于不同的推理模式
+class InferenceStrategy:
+    """推理策略接口"""
+    
+    def infer(self, tts, voice_path, text, output_path) -> bool:
+        """
+        执行推理
         
         Args:
-            segment_index (int, optional): 段落索引，如果提供则添加到文件名中
+            tts: TTS模型对象
+            voice_path: 参考音频路径
+            text: 推理文本
+            output_path: 输出音频路径
             
         Returns:
-            str: 临时文件路径
+            bool: 推理是否成功
         """
-        # 确保临时目录存在
-        self.ensure_dir_exists(self.temp_dir)
+        raise NotImplementedError("子类必须实现infer方法")
+
+
+class NormalInferenceStrategy(InferenceStrategy):
+    """普通推理策略"""
+    
+    def infer(self, tts, voice_path, text, output_path) -> bool:
+        """使用普通模式执行推理"""
+        try:
+            tts.infer(voice_path, text, output_path)
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+        except Exception as e:
+            print(f"普通推理出错: {str(e)}")
+            return False
+
+
+class FastInferenceStrategy(InferenceStrategy):
+    """快速推理策略"""
+    
+    def infer(self, tts, voice_path, text, output_path) -> bool:
+        """使用快速模式执行推理"""
+        try:
+            tts.infer_fast(voice_path, text, output_path)
+            return os.path.exists(output_path) and os.path.getsize(output_path) > 0
+        except Exception as e:
+            print(f"快速推理出错: {str(e)}")
+            return False
+
+
+# 创建策略工厂
+class InferenceStrategyFactory:
+    """推理策略工厂类"""
+    
+    @staticmethod
+    def create_strategy(mode: str) -> InferenceStrategy:
+        """
+        创建推理策略
         
-        # 生成文件名
-        unique_id = uuid.uuid4().hex[:8]
-        timestamp = int(time.time())
-        
-        if segment_index is not None:
-            filename = f"temp_{timestamp}_{unique_id}_{segment_index}.wav"
+        Args:
+            mode: 推理模式，"normal"或"fast"
+            
+        Returns:
+            InferenceStrategy: 推理策略对象
+        """
+        if mode == "fast":
+            return FastInferenceStrategy()
         else:
-            filename = f"temp_{timestamp}_{unique_id}.wav"
-            
-        return os.path.join(self.temp_dir, filename)
-        
-    def handle_exception(self, e, context="操作"):
-        """
-        处理异常并发送错误信号
-        
-        Args:
-            e (Exception): 异常对象
-            context (str): 上下文描述，说明发生异常的操作
-            
-        Returns:
-            str: 格式化的错误消息
-        """
-        error_msg = f"{context}时出错: {str(e)}\n{traceback.format_exc()}"
-        print(error_msg)
-        self.error.emit(f"{context}时出错: {str(e)}")
-        return error_msg 
+            return NormalInferenceStrategy() 

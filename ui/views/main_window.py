@@ -21,8 +21,8 @@ from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
 from ui.utils.text_processor import TextProcessor
-from ui.controllers.single_role_worker import SingleRoleInferenceWorker
-from ui.controllers.multi_role_worker import MultiRoleInferenceWorker
+from ui.controllers.single_role_inference import SingleRoleInference
+from ui.controllers.multi_role_inference import MultiRoleInference
 from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH, DEFAULT_PUNCT_CHARS, DEFAULT_PAUSE_TIME
 
 
@@ -761,7 +761,7 @@ class MainWindow(QMainWindow):
             
             # 创建并启动推理线程
             self.inference_thread = QThread()
-            self.inference_worker = SingleRoleInferenceWorker(
+            self.inference_worker = SingleRoleInference(
                 self.tts, 
                 voice_path, 
                 text,
@@ -835,7 +835,7 @@ class MainWindow(QMainWindow):
         
         # 创建并启动多角色推理线程
         self.inference_thread = QThread()
-        self.inference_worker = MultiRoleInferenceWorker(
+        self.inference_worker = MultiRoleInference(
             self.tts,
             self.character_manager,
             role_text_pairs,
