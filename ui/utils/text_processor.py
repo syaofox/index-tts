@@ -132,10 +132,18 @@ class TextProcessor:
         # 处理段落和空行
         paragraphs = []
         current_paragraph = []
+        empty_line_count = 0  # 用于跟踪连续空行计数
         
         for line in lines:
             line = line.strip()
             if line:
+                # 如果之前有空行计数，先处理
+                if empty_line_count > 0:
+                    # 为之前的每个空行添加一个<br>标记
+                    for _ in range(empty_line_count):
+                        paragraphs.append(cls.BR_TAG)
+                    empty_line_count = 0
+                
                 # 非空行，添加到当前段落
                 current_paragraph.append(line)
             else:
@@ -145,9 +153,13 @@ class TextProcessor:
                     paragraphs.append(' '.join(current_paragraph))
                     current_paragraph = []
                 
-                # 添加<br>标记表示空行
-                if not paragraphs or paragraphs[-1] != cls.BR_TAG:
-                    paragraphs.append(cls.BR_TAG)
+                # 累加空行计数，而不是立即添加<br>标记
+                empty_line_count += 1
+        
+        # 处理文本末尾的空行
+        if empty_line_count > 0:
+            for _ in range(empty_line_count):
+                paragraphs.append(cls.BR_TAG)
         
         # 处理最后一个段落
         if current_paragraph:
