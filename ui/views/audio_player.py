@@ -117,6 +117,12 @@ class AudioPlayer(QWidget):
         self.waveformPlot.setYRange(-1, 1)  # 设置固定的Y轴范围
         self.waveformPlot.setMinimumHeight(max(30, self.waveform_height))  # 确保有最小高度
         
+        # 设置波形图边距为0
+        self.waveformPlot.getPlotItem().setContentsMargins(0, 0, 0, 0)
+        self.waveformPlot.getPlotItem().getViewBox().setDefaultPadding(0)
+        # 设置ViewBox的范围，同时设置padding为0
+        self.waveformPlot.getPlotItem().getViewBox().setRange(xRange=[0, 1], yRange=[-1, 1], padding=0)
+
         # 初始化柱状图数据
         # 创建柱状图对象 - 正值和负值分别使用不同的柱状图
         self.waveformBarsPositive = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.waveform_color, pen=None)
