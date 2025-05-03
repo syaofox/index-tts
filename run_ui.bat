@@ -1,4 +1,3 @@
-@echo off
 call conda activate index-tts
-python main.py
+python gui.py
 pause 

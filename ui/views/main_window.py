@@ -955,12 +955,7 @@ class MainWindow(QMainWindow):
     
     def cleanupOnExit(self):
         """程序退出前清理临时文件"""
-        # 新方式不再需要清理临时文件，因为我们直接使用原始音频文件
-        # 这个方法保留以便兼容现有调用
-        try:
-            print("临时文件清理完成（新版本不再需要）")
-        except Exception as e:
-            print(f"清理临时文件出错: {str(e)}")
+        pass
     
     def formatFilename(self, speaker_name, text_content):
         """
