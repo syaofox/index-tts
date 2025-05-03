@@ -4,6 +4,7 @@
 
 import os
 import time
+import torch
 from typing import Tuple, List, Optional
 
 from ui.controllers.inference_base import InferenceBase, InferenceStrategyFactory
@@ -36,12 +37,12 @@ class SingleRoleInference(InferenceBase):
         self.strategy = InferenceStrategyFactory.create_strategy(infer_mode)
         self.infer_mode = infer_mode
     
-    def process_inference(self) -> Tuple[bool, Optional[str]]:
+    def process_inference(self) -> Tuple[bool, Optional[Tuple]]:
         """
         处理推理任务
         
         Returns:
-            tuple: (success, output_file_path)
+            tuple: (success, (sample_rate, wave_data))
         """
         try:
             # 检查参考音频是否存在
@@ -53,10 +54,6 @@ class SingleRoleInference(InferenceBase):
             if not self.text.strip():
                 self.error.emit("推理文本不能为空")
                 return False, None
-            
-            # 生成输出路径（如果未提供）
-            if not self.output_path:
-                self.output_path = self.generate_output_path()
             
             # 预处理文本
             self.progress.emit("正在预处理文本...")
@@ -73,10 +70,13 @@ class SingleRoleInference(InferenceBase):
                 return self._process_single_text(self.text)
             
         except Exception as e:
-            error_msg = self.handle_exception(e, "处理推理任务")
+            import traceback
+            error_msg = f"处理推理任务时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(error_msg)
             return False, None
     
-    def _process_text_in_segments(self, segments: List[str]) -> Tuple[bool, Optional[str]]:
+    def _process_text_in_segments(self, segments: List[str]) -> Tuple[bool, Optional[Tuple]]:
         """
         按段落处理文本
         
@@ -84,7 +84,7 @@ class SingleRoleInference(InferenceBase):
             segments (list): 文本段落列表
             
         Returns:
-            tuple: (success, output_file_path)
+            tuple: (success, (sample_rate, wave_data))
         """
         try:
             # 计算实际处理的片段数（不包括<br>标记）
@@ -98,12 +98,8 @@ class SingleRoleInference(InferenceBase):
             for i, segment in enumerate(segments):
                 # 检查是否请求停止
                 if self.is_stop_requested():
-                    # 处理部分结果
-                    partial_result = self.save_partial_output(temp_outputs, silence_positions, segments)
-                    if partial_result:
-                        return True, partial_result
-                    else:
-                        return False, None
+                    self.error.emit("推理已被用户中断")
+                    return False, None
                 
                 if segment == self.BR_TAG:  # 处理<br>标记
                     self.progress.emit(f"检测到空行，将在此处添加 {self.pause_time} 秒静音")
@@ -112,32 +108,34 @@ class SingleRoleInference(InferenceBase):
                 
                 if not segment.strip():  # 跳过空片段
                     continue
-                    
-                # 创建临时输出文件路径
-                temp_path = self.create_temp_file_path(segment_index)
                 
                 self.progress.emit(f"处理第 {segment_index+1}/{len(actual_segments)} 段: {segment[:20]}...")
                 
                 # 进行推理
                 try:
-                    # 使用策略模式执行推理
-                    if self.strategy.infer(self.tts, self.voice_path, segment, temp_path):
-                        temp_outputs.append((i, temp_path))  # 保存原始索引位置和文件路径
+                    # 使用内存模式调用推理策略
+                    result = self.strategy.infer(self.tts, self.voice_path, segment, None)
+                    if isinstance(result, tuple) and len(result) == 2:
+                        # 成功获取内存数据
+                        sample_rate, wave_data = result
+                        if sample_rate is not None and wave_data is not None:
+                            # 添加到临时输出列表，不再进行格式转换，统一在处理阶段进行
+                            temp_outputs.append((i, wave_data))
+                        else:
+                            self.progress.emit(f"警告: 段落 {segment_index+1} 未生成有效音频")
                     else:
-                        self.progress.emit(f"警告: 段落 {segment_index+1} 未生成有效音频")
+                        self.progress.emit(f"警告: 段落 {segment_index+1} 的推理返回格式不正确")
                 except Exception as segment_error:
-                    self.progress.emit(f"处理段落 {segment_index+1} 时出错: {str(segment_error)}")
+                    import traceback
+                    error_msg = f"处理段落 {segment_index+1} 时出错: {str(segment_error)}\n{traceback.format_exc()}"
+                    self.progress.emit(error_msg)
                 
                 segment_index += 1
             
             # 检查是否请求停止
             if self.is_stop_requested():
-                # 处理部分结果
-                partial_result = self.save_partial_output(temp_outputs, silence_positions, segments)
-                if partial_result:
-                    return True, partial_result
-                else:
-                    return False, None
+                self.error.emit("推理已被用户中断")
+                return False, None
             
             # 检查是否有有效输出
             if not temp_outputs:
@@ -146,22 +144,27 @@ class SingleRoleInference(InferenceBase):
             
             # 合并所有音频片段，包括<br>标记处的静音
             self.progress.emit(f"合并音频片段，添加段落间静音 ({self.pause_time}秒)...")
-            self.merge_audio_files_with_silence(temp_outputs, silence_positions, self.output_path)
             
-            # 清理临时文件
-            self.cleanup_temp_files()
+            # 使用内存模式合并音频
+            sample_rate = 24000  # 假设使用默认采样率
+            merged_wave, sr = self.merge_audio_with_silence(temp_outputs, silence_positions, sample_rate)
             
-            if os.path.exists(self.output_path) and os.path.getsize(self.output_path) > 0:
-                return True, self.output_path
-            else:
-                self.error.emit("合并音频文件失败")
+            if merged_wave is None:
+                self.error.emit("合并音频数据失败")
                 return False, None
+
+            # 返回内存音频数据
+            self.progress.emit("音频数据合并完成，返回内存数据")
+            return True, (sr, merged_wave)
             
         except Exception as e:
-            error_msg = self.handle_exception(e, "按段落处理文本")
+            import traceback
+            error_msg = f"按段落处理文本时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(error_msg)
             return False, None
     
-    def _process_single_text(self, text: str) -> Tuple[bool, Optional[str]]:
+    def _process_single_text(self, text: str) -> Tuple[bool, Optional[Tuple]]:
         """
         处理单个文本片段
         
@@ -169,7 +172,7 @@ class SingleRoleInference(InferenceBase):
             text (str): 要处理的文本
             
         Returns:
-            tuple: (success, output_file_path)
+            tuple: (success, (sample_rate, wave_data))
         """
         try:
             # 检查是否请求停止
@@ -183,19 +186,26 @@ class SingleRoleInference(InferenceBase):
             if self.replace_rules:
                 text = TextProcessor.apply_replace_rules(text, self.replace_rules)
             
-            # 使用策略模式执行推理
-            if self.strategy.infer(self.tts, self.voice_path, text, self.output_path):
-                # 最后检查一次是否请求停止
-                if self.is_stop_requested():
-                    self.progress.emit("已保存生成结果")
-                    return True, self.output_path
-                
-                self.progress.emit("语音生成完成！")
-                return True, self.output_path
+            # 使用内存模式进行推理
+            result = self.strategy.infer(self.tts, self.voice_path, text, None)
+            
+            if isinstance(result, tuple) and len(result) == 2:
+                # 成功获取内存数据
+                sample_rate, wave_data = result
+                if sample_rate is not None and wave_data is not None:
+                    # 内存模式，直接返回数据
+                    self.progress.emit("音频生成完成，返回内存数据")
+                    return True, (sample_rate, wave_data)
+                else:
+                    self.error.emit("推理未返回有效的音频数据")
+                    return False, None
             else:
-                self.error.emit("语音生成失败")
+                self.error.emit("推理返回格式不正确")
                 return False, None
             
         except Exception as e:
-            error_msg = self.handle_exception(e, "处理单个文本片段")
+            import traceback
+            error_msg = f"处理单个文本片段时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(error_msg)
             return False, None 

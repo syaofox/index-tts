@@ -15,5 +15,5 @@ from ui.views.main_window import MainWindow
 import os
 
 # 确保重要的目录存在
-for dir_path in ["prompts", "outputs", "outputs/temp", "config"]:
+for dir_path in ["prompts", "outputs", "config"]:
     os.makedirs(dir_path, exist_ok=True) 

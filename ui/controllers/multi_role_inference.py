@@ -4,10 +4,14 @@
 
 import os
 import shutil
+import torch
+import torchaudio
+import numpy as np
 from typing import List, Tuple, Optional
 
 from ui.controllers.inference_base import InferenceBase
 from ui.controllers.single_role_inference import SingleRoleInference
+from ui.utils.text_processor import TextProcessor
 
 
 class MultiRoleInference(InferenceBase):
@@ -34,12 +38,12 @@ class MultiRoleInference(InferenceBase):
         self.replace_rules = replace_rules or []
         self.infer_mode = infer_mode
     
-    def process_inference(self) -> Tuple[bool, Optional[str]]:
+    def process_inference(self) -> Tuple[bool, Optional[Tuple]]:
         """
         处理多角色推理任务
         
         Returns:
-            tuple: (success, output_file_path)
+            tuple: (success, (sample_rate, wave_data))
         """
         try:
             # 检查是否有有效的角色-文本对
@@ -53,18 +57,14 @@ class MultiRoleInference(InferenceBase):
                 self.error.emit(f"以下角色不存在: {', '.join(missing_roles)}")
                 return False, None
             
-            # 生成输出路径（如果未提供）
-            if not self.output_path:
-                self.output_path = self.generate_output_path()
-            
-            # 用于存储每个角色生成的音频文件路径
-            audio_files = []
+            # 用于存储每个角色生成的音频数据
+            audio_segments = []
+            sample_rate = 24000  # 默认采样率
             
             # 对每个角色-文本对进行推理
             for i, (role_name, text) in enumerate(self.role_text_pairs):
                 # 检查是否请求停止
                 if self.is_stop_requested():
-                    self.cleanup_temp_files()
                     self.error.emit("推理已被用户中断")
                     return False, None
                 
@@ -72,42 +72,46 @@ class MultiRoleInference(InferenceBase):
                 self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})，使用{self.infer_mode}模式")
                 
                 # 处理当前角色
-                audio_file = self._process_single_role(role_name, text, i)
-                if audio_file and os.path.exists(audio_file) and os.path.getsize(audio_file) > 0:
-                    audio_files.append(audio_file)
+                audio_result = self._process_single_role(role_name, text, i)
+                if audio_result:
+                    # _process_single_role返回(sample_rate, wave_data)格式
+                    sr, wave_data = audio_result
+                    if sr != sample_rate and sample_rate != 24000:
+                        # 如果有不同的采样率，记录下来
+                        self.progress.emit(f"角色 '{role_name}' 的音频采样率为 {sr}，与默认采样率 {sample_rate} 不同")
+                        # 使用第一个非默认采样率作为基准
+                        sample_rate = sr
+                    audio_segments.append(wave_data)
             
             # 检查是否请求停止
             if self.is_stop_requested():
-                self.cleanup_temp_files()
                 self.error.emit("推理已被用户中断")
                 return False, None
             
-            # 检查是否至少有一个音频文件
-            if not audio_files:
-                self.error.emit("没有生成任何有效的音频文件")
-                self.cleanup_temp_files()
+            # 检查是否至少有一个音频片段
+            if not audio_segments:
+                self.error.emit("没有生成任何有效的音频数据")
                 return False, None
                 
-            # 合并所有角色的音频文件
-            self.progress.emit(f"正在合并 {len(audio_files)} 个角色的音频文件...")
+            # 合并所有角色的音频数据
+            self.progress.emit(f"正在合并 {len(audio_segments)} 个角色的音频数据...")
             
-            # 尝试合并音频
-            merged_file = self._merge_all_audio_files(audio_files)
+            # 在内存中合并音频
+            merged_wave, merged_sr = self.merge_audio_data(audio_segments, sample_rate)
             
-            # 清理临时目录
-            self.cleanup_temp_files()
-            
-            if not merged_file or not os.path.exists(merged_file):
-                self.error.emit("合并音频文件失败")
+            if merged_wave is None:
+                self.error.emit("合并音频数据失败")
                 return False, None
             
-            # 发送完成信号
-            self.progress.emit("多角色推理完成！")
-            return True, merged_file
+            # 返回内存中的合并结果
+            self.progress.emit("多角色音频合并完成！")
+            return True, (merged_sr, merged_wave)
             
         except Exception as e:
-            self.handle_exception(e, "多角色推理")
-            self.cleanup_temp_files()
+            import traceback
+            error_msg = f"多角色推理时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(f"多角色推理失败: {str(e)}")
             return False, None
     
     def _check_roles_exist(self) -> List[str]:
@@ -123,7 +127,7 @@ class MultiRoleInference(InferenceBase):
                 missing_roles.append(role_name)
         return missing_roles
     
-    def _process_single_role(self, role_name: str, text: str, index: int) -> Optional[str]:
+    def _process_single_role(self, role_name: str, text: str, index: int):
         """
         处理单个角色的推理
         
@@ -133,7 +137,7 @@ class MultiRoleInference(InferenceBase):
             index: 角色索引
             
         Returns:
-            str: 生成的音频文件路径，如果失败则返回None
+            tuple: (sample_rate, wave_data)，如果失败则返回None
         """
         try:
             # 检查是否请求停止
@@ -151,15 +155,12 @@ class MultiRoleInference(InferenceBase):
                 self.error.emit(f"角色 '{role_name}' 的参考音频不存在: {voice_path}")
                 return None
             
-            # 为当前角色生成一个临时输出文件
-            role_output_path = self.create_temp_file_path(f"{role_name}_{index}")
-            
             # 创建单角色推理器，但不要启动新线程
             inference = SingleRoleInference(
                 self.tts,
                 voice_path,
                 text,
-                output_path=role_output_path,
+                output_path=None,  # 不指定输出路径，使用内存模式
                 punct_chars=self.punct_chars,
                 pause_time=self.pause_time,
                 replace_rules=self.replace_rules,
@@ -169,66 +170,43 @@ class MultiRoleInference(InferenceBase):
             # 连接进度信号，添加角色名前缀
             inference.progress.connect(lambda msg, name=role_name: self.progress.emit(f"[{name}] {msg}"))
             
-            # 同步执行推理
-            success, output_file = inference.process_inference()
-            
-            if not success or not output_file:
-                self.error.emit(f"处理角色 '{role_name}' 的文本时出错")
-                return None
-            
-            if not os.path.exists(output_file) or os.path.getsize(output_file) == 0:
-                self.error.emit(f"生成的角色 '{role_name}' 的音频文件无效")
-                return None
-            
-            return output_file
-            
-        except Exception as e:
-            self.handle_exception(e, f"处理角色 '{role_name}' 的推理")
-            return None
-    
-    def _merge_all_audio_files(self, audio_files: List[str]) -> Optional[str]:
-        """
-        合并所有角色的音频文件
-        
-        Args:
-            audio_files: 音频文件路径列表
-            
-        Returns:
-            str: 合并后的文件路径，如果失败则返回None
-        """
-        if not audio_files:
-            return None
-        
-        try:
-            # 确保输出目录存在
-            os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
-            
-            # 使用基类的合并方法
-            self.progress.emit(f"正在合并 {len(audio_files)} 个音频文件...")
-            merged_file = self.merge_audio_files(audio_files, self.output_path)
-            
-            if not merged_file or not os.path.exists(merged_file):
-                # 如果合并失败但至少有一个音频文件，可以保存第一个音频文件作为最终输出
-                if audio_files and os.path.exists(audio_files[0]):
-                    self.progress.emit("合并失败，保存第一个角色的音频作为输出...")
-                    shutil.copy2(audio_files[0], self.output_path)
-                    return self.output_path
+            # 同步执行推理，使用内存模式
+            if len(text.strip()) > 0:
+                # 如果是长文本，进行分段处理
+                segments = TextProcessor.preprocess_text(
+                    text, self.punct_chars, self.replace_rules
+                )
+                
+                if len(segments) > 1:
+                    # 使用内部方法处理分段文本
+                    success, result = inference._process_text_in_segments(segments)
                 else:
-                    self.error.emit("合并音频文件失败且没有可用的备选音频")
+                    # 使用内部方法处理单个文本
+                    success, result = inference._process_single_text(text)
+                
+                if not success:
+                    self.error.emit(f"处理角色 '{role_name}' 的文本时出错")
                     return None
-            
-            return merged_file
+                
+                # 处理返回的结果 - 只接受(sample_rate, wave_data)格式
+                if isinstance(result, tuple) and len(result) == 2:
+                    sample_rate, wave_data = result
+                    # 确保数据不为None
+                    if sample_rate is None or wave_data is None:
+                        self.error.emit(f"角色 '{role_name}' 的生成结果包含无效数据")
+                        return None
+                    return (sample_rate, wave_data)
+                else:
+                    # 非预期的返回格式
+                    self.error.emit(f"角色 '{role_name}' 的生成结果格式错误: {type(result)}")
+                    return None
+            else:
+                self.progress.emit(f"角色 '{role_name}' 的文本为空，跳过")
+                return None
             
         except Exception as e:
-            self.handle_exception(e, "合并音频文件")
-            
-            # 保存第一个角色的音频作为输出
-            if audio_files and os.path.exists(audio_files[0]):
-                try:
-                    self.progress.emit("合并失败，保存第一个角色的音频作为输出...")
-                    shutil.copy2(audio_files[0], self.output_path)
-                    return self.output_path
-                except Exception as copy_error:
-                    self.error.emit(f"保存单个角色音频失败: {str(copy_error)}")
-            
+            import traceback
+            error_msg = f"处理角色 '{role_name}' 的推理时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(f"处理角色 '{role_name}' 失败: {str(e)}")
             return None 
