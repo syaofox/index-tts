@@ -29,6 +29,9 @@ class TextProcessor:
         Returns:
             list: 处理后的文本段落列表
         """
+        # 清除引号
+        text = cls.clean_quotes(text)
+        
         # 应用文本替换规则
         if replace_rules:
             text = cls.apply_replace_rules(text, replace_rules)
@@ -48,7 +51,15 @@ class TextProcessor:
                     segments.extend(para_segments)
         
         return segments
-    
+
+    # 清除引号
+    @classmethod
+    def clean_quotes(cls, text: str) -> str:
+        """
+        清除引号
+        """
+        return re.sub(r'["\'“”]', '', text)
+       
     @classmethod
     def apply_replace_rules(cls, text: str, replace_rules: List[Tuple[str, str, str]]) -> str:
         """
