@@ -20,7 +20,7 @@ class SingleRoleInferenceWorker(InferenceBase):
     """单角色推理工作器类，处理单一角色的语音生成"""
     
     def __init__(self, tts, voice_path, text, output_path=None, 
-                 punct_chars="。？！", pause_time=0.3, replace_rules=None):
+                 punct_chars="。？！", pause_time=0.3, replace_rules=None, infer_mode="normal"):
         """
         初始化单角色推理工作器
         
@@ -32,11 +32,13 @@ class SingleRoleInferenceWorker(InferenceBase):
             punct_chars: 分割文本的标点符号
             pause_time: 停顿时间(秒)
             replace_rules: 文本替换规则列表
+            infer_mode: 推理模式，"normal"或"fast"
         """
         super().__init__(tts, output_path, punct_chars, pause_time)
         self.voice_path = voice_path
         self.text = text
         self.replace_rules = replace_rules or []
+        self.infer_mode = infer_mode
         
         # 创建临时目录
         self.temp_dir = os.path.join("outputs", "temp")
@@ -99,7 +101,7 @@ class SingleRoleInferenceWorker(InferenceBase):
             # 计算实际处理的片段数（不包括<br>标记）
             actual_segments = [s for s in segments if s != TextProcessor.BR_TAG and s.strip()]
             
-            self.progress.emit(f"共分为 {len(actual_segments)} 个片段进行处理...")
+            self.progress.emit(f"共分为 {len(actual_segments)} 个片段进行处理...({self.infer_mode}模式)")
             temp_outputs = []
             silence_positions = []  # 记录需要添加静音的位置
             
@@ -130,7 +132,12 @@ class SingleRoleInferenceWorker(InferenceBase):
                 
                 # 进行推理
                 try:
-                    self.tts.infer(self.voice_path, segment, temp_path)
+                    # 根据推理模式选择推理方法
+                    if self.infer_mode == "fast":
+                        self.tts.infer_fast(self.voice_path, segment, temp_path)
+                    else:
+                        self.tts.infer(self.voice_path, segment, temp_path)
+                        
                     if os.path.exists(temp_path) and os.path.getsize(temp_path) > 0:
                         temp_outputs.append((i, temp_path))  # 保存原始索引位置和文件路径
                     else:
@@ -195,14 +202,17 @@ class SingleRoleInferenceWorker(InferenceBase):
                 self.error.emit("推理已被用户中断")
                 return False, None
             
-            self.progress.emit("开始语音生成...")
+            self.progress.emit(f"开始语音生成...({self.infer_mode}模式)")
             
             # 应用文本替换规则（如果有）
             if self.replace_rules:
                 text = TextProcessor.apply_replace_rules(text, self.replace_rules)
             
-            # 执行推理
-            self.tts.infer(self.voice_path, text, self.output_path)
+            # 执行推理，根据推理模式选择推理方法
+            if self.infer_mode == "fast":
+                self.tts.infer_fast(self.voice_path, text, self.output_path)
+            else:
+                self.tts.infer(self.voice_path, text, self.output_path)
             
             # 最后检查一次是否请求停止
             if self.is_stop_requested():

@@ -19,7 +19,7 @@ class MultiRoleInferenceWorker(InferenceBase):
     """多角色推理工作线程类"""
     
     def __init__(self, tts, character_manager, role_text_pairs, 
-                 output_path=None, punct_chars="。？！", pause_time=0.3, replace_rules=None):
+                 output_path=None, punct_chars="。？！", pause_time=0.3, replace_rules=None, infer_mode="normal"):
         """
         初始化多角色推理工作器
         
@@ -31,11 +31,13 @@ class MultiRoleInferenceWorker(InferenceBase):
             punct_chars: 分割文本的标点符号
             pause_time: 段落间停顿时间(秒)
             replace_rules: 文本替换规则列表，格式为[(search_str, replace_from, replace_to), ...]
+            infer_mode: 推理模式，"normal"或"fast"
         """
         super().__init__(tts, output_path, punct_chars, pause_time)
         self.character_manager = character_manager
         self.role_text_pairs = role_text_pairs
         self.replace_rules = replace_rules or []
+        self.infer_mode = infer_mode
         
         # 创建唯一的临时目录
         self.temp_dir = os.path.join("outputs", "temp", str(uuid.uuid4()))
@@ -82,7 +84,7 @@ class MultiRoleInferenceWorker(InferenceBase):
                     return False, None
                 
                 # 处理单个角色
-                self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})")
+                self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})，使用{self.infer_mode}模式")
                 
                 # 为当前角色生成一个临时输出文件
                 role_output_path = os.path.join(self.temp_dir, f"{role_name}_{i}.wav")
@@ -180,7 +182,8 @@ class MultiRoleInferenceWorker(InferenceBase):
                 output_path=role_output_path,
                 punct_chars=self.punct_chars,
                 pause_time=self.pause_time,
-                replace_rules=self.replace_rules  # 传递替换规则
+                replace_rules=self.replace_rules,  # 传递替换规则
+                infer_mode=self.infer_mode  # 传递推理模式
             )
             
             # 连接进度信号，添加角色名前缀

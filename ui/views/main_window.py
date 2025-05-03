@@ -383,6 +383,12 @@ class MainWindow(QMainWindow):
         
         text_split_layout.addWidget(pause_label)
         text_split_layout.addWidget(self.pause_edit)
+        
+        # 添加快速推理复选框
+        self.fast_mode_checkbox = QCheckBox("快速推理")
+        self.fast_mode_checkbox.setToolTip("开启快速推理模式，推理速度更快但可能有轻微音质下降")
+        text_split_layout.addWidget(self.fast_mode_checkbox)
+        
         text_split_layout.addStretch(1)
         
         top_layout.addWidget(text_split_widget)
@@ -707,6 +713,10 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "警告", "请输入有效的停顿时间（秒）")
             return
         
+        # 获取推理模式
+        infer_mode = "fast" if self.fast_mode_checkbox.isChecked() else "normal"
+        print(f"推理模式: {infer_mode}")
+        
         # 停止所有音频播放
         self.ref_audio_player.stop()
         self.result_audio_player.stop()
@@ -748,7 +758,8 @@ class MainWindow(QMainWindow):
                 output_path=output_path,
                 punct_chars=punct_chars,
                 pause_time=pause_time,
-                replace_rules=replace_rules  # 添加替换规则参数
+                replace_rules=replace_rules,  # 添加替换规则参数
+                infer_mode=infer_mode        # 添加推理模式参数
             )
             
             # 连接信号
@@ -768,9 +779,9 @@ class MainWindow(QMainWindow):
         # 多角色推理 - 新流程
         else:
             # 创建一个新的多角色推理处理器
-            self.handleMultiRoleInference(role_text_pairs, punct_chars, pause_time)
+            self.handleMultiRoleInference(role_text_pairs, punct_chars, pause_time, infer_mode)
     
-    def handleMultiRoleInference(self, role_text_pairs, punct_chars, pause_time):
+    def handleMultiRoleInference(self, role_text_pairs, punct_chars, pause_time, infer_mode):
         """
         处理多角色推理
         
@@ -778,6 +789,7 @@ class MainWindow(QMainWindow):
             role_text_pairs (list): 包含(角色名, 文本内容)元组的列表
             punct_chars (str): 分割标点符号
             pause_time (float): 停顿时间(秒)
+            infer_mode (str): 推理模式
         """
         # 禁用UI控件
         self.disableUIControls(True)
@@ -820,7 +832,8 @@ class MainWindow(QMainWindow):
             output_path=output_path,
             punct_chars=punct_chars,
             pause_time=pause_time,
-            replace_rules=replace_rules  # 添加替换规则参数
+            replace_rules=replace_rules,  # 添加替换规则参数
+            infer_mode=infer_mode        # 添加推理模式参数
         )
         
         # 连接信号
@@ -866,6 +879,7 @@ class MainWindow(QMainWindow):
         self.text_edit.setEnabled(not disable)
         self.punct_edit.setEnabled(not disable)
         self.pause_edit.setEnabled(not disable)
+        self.fast_mode_checkbox.setEnabled(not disable)
         
         # 禁用/启用历史列表
         self.history_list.setEnabled(not disable)
