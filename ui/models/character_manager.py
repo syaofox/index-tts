@@ -103,7 +103,8 @@ class CharacterManager:
                     character_name = parts[0]
                     characters.add(character_name)
             
-            return list(characters)
+            # 返回按字母顺序排序的角色列表
+            return sorted(list(characters))
         except Exception as e:
             print(f"获取角色列表出错: {e}")
             return []
