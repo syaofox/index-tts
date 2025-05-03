@@ -39,16 +39,7 @@ class MultiRoleInferenceWorker(InferenceBase):
         self.replace_rules = replace_rules or []
         self.infer_mode = infer_mode
         
-        # 创建唯一的临时目录
-        self.temp_dir = os.path.join("outputs", "temp", str(uuid.uuid4()))
-        self.ensure_dir_exists(self.temp_dir)
-        print(f"创建多角色临时目录: {self.temp_dir}")
-    
-    def stop(self):
-        """请求停止推理过程"""
-        super().stop()
-        # 设置标志给可能正在运行的单角色工作器
-        self.progress.emit("正在停止多角色推理过程...")
+        # 临时目录已在基类中创建，这里不需要重复创建
     
     def process_inference(self) -> Tuple[bool, Optional[str]]:
         """
@@ -80,14 +71,12 @@ class MultiRoleInferenceWorker(InferenceBase):
             for i, (role_name, text) in enumerate(self.role_text_pairs):
                 # 检查是否请求停止
                 if self.is_stop_requested():
+                    self.cleanup_temp_files()
                     self.error.emit("推理已被用户中断")
                     return False, None
                 
                 # 处理单个角色
                 self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})，使用{self.infer_mode}模式")
-                
-                # 为当前角色生成一个临时输出文件
-                role_output_path = os.path.join(self.temp_dir, f"{role_name}_{i}.wav")
                 
                 # 处理当前角色
                 audio_file = self.process_single_role(role_name, text, i)
@@ -124,9 +113,7 @@ class MultiRoleInferenceWorker(InferenceBase):
             return True, merged_file
             
         except Exception as e:
-            error_msg = f"多角色推理出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, "多角色推理")
             self.cleanup_temp_files()
             return False, None
     
@@ -172,7 +159,7 @@ class MultiRoleInferenceWorker(InferenceBase):
                 return None
             
             # 为当前角色生成一个临时输出文件
-            role_output_path = os.path.join(self.temp_dir, f"{role_name}_{index}.wav")
+            role_output_path = self.create_temp_file_path(f"{role_name}_{index}")
             
             # 创建单角色推理工作器，但不要启动新线程
             worker = SingleRoleInferenceWorker(
@@ -203,9 +190,7 @@ class MultiRoleInferenceWorker(InferenceBase):
             return output_file
             
         except Exception as e:
-            error_msg = f"处理角色 '{role_name}' 的推理时出错: {str(e)}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, f"处理角色 '{role_name}' 的推理")
             return None
     
     def merge_all_audio_files(self, audio_files: List[str]) -> Optional[str]:
@@ -242,9 +227,7 @@ class MultiRoleInferenceWorker(InferenceBase):
             return merged_file
             
         except Exception as e:
-            error_msg = f"合并音频文件时出错: {str(e)}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, "合并音频文件")
             
             # 保存第一个角色的音频作为输出
             if audio_files and os.path.exists(audio_files[0]):

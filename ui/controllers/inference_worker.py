@@ -12,6 +12,8 @@ import wave
 import numpy as np
 
 from PySide6.QtCore import QObject, Signal, QMutex, QWaitCondition
+from ui.controllers.inference_base import InferenceBase
+from ui.utils.text_processor import TextProcessor
 from ui.config import REPLACE_RULES_CONFIG_PATH
 
 
@@ -45,6 +47,10 @@ class InferenceWorker(QObject):
         
         # 检查配置文件并加载（如果需要）
         self.check_and_load_config()
+        
+        # 创建临时目录
+        self.temp_dir = os.path.join("outputs", "temp", str(uuid.uuid4()))
+        self.ensure_dir_exists(self.temp_dir)
 
     def check_and_load_config(self):
         """检查配置文件是否存在并且需要重新加载"""
@@ -57,7 +63,7 @@ class InferenceWorker(QObject):
         
         # 检查是否需要重新加载
         if current_mtime > InferenceWorker._config_last_modified or not InferenceWorker._replace_rules_cache:
-            self.load_text_replace_config()
+            self.replace_rules = TextProcessor.load_replace_rules_from_file(self.REPLACE_CONFIG_PATH)
             # 更新类级别的缓存
             InferenceWorker._replace_rules_cache = self.replace_rules.copy()
             InferenceWorker._config_last_modified = current_mtime
@@ -67,50 +73,14 @@ class InferenceWorker(QObject):
             self.replace_rules = InferenceWorker._replace_rules_cache.copy()
             print(f"使用缓存的 {len(self.replace_rules)} 条替换规则")
 
-    def load_text_replace_config(self):
-        """加载文本替换配置文件"""
-        try:
-            self.replace_rules = []
-            with open(self.REPLACE_CONFIG_PATH, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    # 跳过空行和注释行
-                    if not line or line.startswith('#'):
-                        continue
-                    
-                    parts = line.split('|')  # 使用竖线分隔
-                    if len(parts) == 3:
-                        search_str, replace_from, replace_to = parts
-                        self.replace_rules.append((search_str, replace_from, replace_to))
-                    else:
-                        print(f"警告：配置行格式不正确，已跳过: {line}")
-            
-            if self.replace_rules:
-                print(f"已加载 {len(self.replace_rules)} 条文本替换规则")
-        except Exception as e:
-            print(f"加载文本替换配置文件出错: {str(e)}")
-            self.error.emit(f"加载文本替换配置文件出错: {str(e)}")
-
-    def replace_text_by_config(self, text):
-        """根据配置规则替换文本"""
-        if not self.replace_rules:
-            return text
-            
-        result_text = text
-        for search_str, replace_from, replace_to in self.replace_rules:
-            # 在搜索字符串中查找需要修改的部分并替换
-            if search_str in result_text:
-                # 创建一个新字符串，将搜索字符串中的替换源替换为替换目标
-                modified_search_str = search_str.replace(replace_from, replace_to)
-                # 替换原文本中的搜索字符串为修改后的字符串
-                result_text = result_text.replace(search_str, modified_search_str)
-        
-        return result_text
-
     def stop(self):
         """请求停止推理过程"""
         self._stop_requested = True
         self.progress.emit("正在停止推理过程...")
+    
+    def is_stop_requested(self):
+        """检查是否请求停止推理"""
+        return self._stop_requested
     
     def save_partial_output(self, temp_outputs, silence_positions, preprocessed_segments):
         """尝试保存部分处理结果，成功则返回True，失败返回False"""
@@ -184,7 +154,10 @@ class InferenceWorker(QObject):
             if success and output_file:
                 self.finished.emit(output_file)
             else:
-                self.error.emit("语音生成失败")
+                if self.is_stop_requested():
+                    self.error.emit("推理已被用户中断")
+                else:
+                    self.error.emit("语音生成失败")
                 
         except Exception as e:
             import traceback
@@ -192,103 +165,63 @@ class InferenceWorker(QObject):
             print(error_msg)
             self.error.emit(error_msg)
 
-    def preprocess_text(self, text):
+    def ensure_dir_exists(self, dir_path):
+        """确保目录存在，如果不存在则创建"""
+        if dir_path and not os.path.exists(dir_path):
+            os.makedirs(dir_path, exist_ok=True)
+
+    def process_inference(self):
         """
-        文本预处理，包括：
-        1. 应用文本替换规则（如果有）
-        2. 按段落分割
-        3. 将空行替换为<br>标记
-        4. 对非<br>段落按标点符号分割
-        """
-        # 应用文本替换规则
-        if self.replace_rules:
-            self.progress.emit("应用文本替换规则...")
-            text = self.replace_text_by_config(text)
+        处理推理任务，可被同步调用
         
-        self.progress.emit("分割段落并处理空行...")
-        paragraphs = self.split_text_by_newlines_with_br(text)
-        
-        # 对每个段落，如果不是<br>标记，则按标点分割
-        segments = []
-        for para in paragraphs:
-            if para == self.BR_TAG:
-                segments.append(para)
-            else:
-                # 对非空且非<br>的段落按标点分割
-                if para.strip():
-                    para_segments = self.split_text_by_punctuation(para, self.punct_chars)
-                    segments.extend(para_segments)
-        
-        return segments
-    
-    def split_text_by_punctuation(self, text, punct_chars):
-        """按指定的标点符号分割文本"""
-        if not text:
-            return []
-            
-        # 构建用于分割的正则表达式
-        pattern = f"([{re.escape(punct_chars)}])"
-        
-        # 分割文本
-        parts = re.split(pattern, text)
-        
-        # 将标点符号与前面的文本合并
-        segments = []
-        i = 0
-        while i < len(parts):
-            if i + 1 < len(parts) and parts[i+1] in punct_chars:
-                # 当前文本加上后面的标点
-                segments.append(parts[i] + parts[i+1])
-                i += 2
-            else:
-                # 没有标点的文本
-                if parts[i]:  # 不添加空文本
-                    segments.append(parts[i])
-                i += 1
-        
-        return segments
-    
-    def split_text_by_newlines_with_br(self, text):
-        """
-        按换行符分割文本，并将空行替换为<br>标记
-        
-        Args:
-            text (str): 输入文本
-            
         Returns:
-            list: 分割后的段落列表，空行被替换为<br>标记
+            tuple: (success, output_file_path)
+                success (bool): 是否成功完成推理
+                output_file_path (str): 输出音频文件路径，如果处理失败则为None
         """
-        if not text:
-            return []
+        try:
+            # 检查参考音频是否存在
+            if not os.path.exists(self.voice_path):
+                self.error.emit(f"参考音频文件不存在: {self.voice_path}")
+                return False, None
             
-        # 分割行
-        lines = text.split('\n')
-        
-        # 处理段落和空行
-        paragraphs = []
-        current_paragraph = []
-        
-        for line in lines:
-            line = line.strip()
-            if line:
-                # 非空行，添加到当前段落
-                current_paragraph.append(line)
+            # 检查文本是否为空
+            if not self.text.strip():
+                self.error.emit("推理文本不能为空")
+                return False, None
+            
+            # 生成输出路径（如果未提供）
+            if not self.output_path:
+                # 创建输出目录（如果不存在）
+                output_dir = "outputs"
+                self.ensure_dir_exists(output_dir)
+                # 为输出文件生成一个带时间戳的文件名
+                timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+                self.output_path = os.path.join(output_dir, f"output_{timestamp}.wav")
+            
+            # 确保输出目录存在
+            self.ensure_dir_exists(os.path.dirname(self.output_path))
+            
+            # 预处理文本
+            self.progress.emit("正在预处理文本...")
+            preprocessed_segments = TextProcessor.preprocess_text(
+                self.text, self.punct_chars, self.replace_rules
+            )
+            
+            # 根据段落数量决定处理方式
+            if len(preprocessed_segments) > 1:
+                return self.process_text_in_segments(preprocessed_segments)
             else:
-                # 空行，结束当前段落
-                if current_paragraph:
-                    # 将当前段落合并为一个字符串
-                    paragraphs.append(' '.join(current_paragraph))
-                    current_paragraph = []
-                
-                # 添加<br>标记表示空行
-                if not paragraphs or paragraphs[-1] != self.BR_TAG:
-                    paragraphs.append(self.BR_TAG)
-        
-        # 处理最后一个段落
-        if current_paragraph:
-            paragraphs.append(' '.join(current_paragraph))
-        
-        return paragraphs
+                # 作为单个文本处理
+                self.progress.emit("文本将作为整体处理...")
+                return self.process_single_text(self.text, self.output_path)
+            
+        except Exception as e:
+            import traceback
+            error_msg = f"处理推理任务时出错: {str(e)}\n{traceback.format_exc()}"
+            print(error_msg)
+            self.error.emit(error_msg)
+            return False, None
     
     def create_silence(self, duration, sample_rate):
         """创建指定时长的静音"""
@@ -358,131 +291,87 @@ class InferenceWorker(QObject):
         # 保存合并后的音频
         torchaudio.save(output_file, merged_waveform, sample_rate)
     
-    def merge_audio_files_with_silence(self, input_files, output_file, segments):
-        """合并多个音频文件成一个，并在片段间添加静音"""
+    def merge_audio_files(self, input_files, output_file):
+        """合并多个音频文件成一个"""
         import torch
         import torchaudio
-        import numpy as np
         
-        # 读取所有音频以获取采样率
         if not input_files:
-            raise ValueError("没有音频文件可合并")
+            return None
         
-        # 先确定采样率
-        waveform, sample_rate = torchaudio.load(input_files[0])
-        
-        # 创建输出波形列表
-        output_waveforms = []
-        
-        # 确定非空段落的索引
-        non_empty_indices = [i for i, segment in enumerate(segments) if segment.strip()]
-        
-        # 初始化音频文件索引
-        file_index = 0
-        
-        # 处理第一个非空段落
-        if non_empty_indices and file_index < len(input_files):
-            waveform, sr = torchaudio.load(input_files[file_index])
-            if sr != sample_rate:
-                waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
-            output_waveforms.append(waveform)
-            file_index += 1
-        
-        # 处理剩余的非空段落
-        for i in range(1, len(non_empty_indices)):
-            # 添加静音
-            silence = self.create_silence(self.pause_time, sample_rate)
-            output_waveforms.append(silence)
-            
-            # 添加当前段落的音频
-            if file_index < len(input_files):
-                waveform, sr = torchaudio.load(input_files[file_index])
-                if sr != sample_rate:
-                    waveform = torchaudio.transforms.Resample(sr, sample_rate)(waveform)
-                output_waveforms.append(waveform)
-                file_index += 1
-        
-        # 检查是否有波形需要合并
-        if not output_waveforms:
-            raise ValueError("没有可合并的音频片段")
-        
-        # 合并所有波形
-        merged_waveform = torch.cat(output_waveforms, dim=1)
-        
-        # 保存合并后的音频
-        torchaudio.save(output_file, merged_waveform, sample_rate) 
-
-    def process_inference(self):
-        """
-        处理推理任务，可被同步调用
-        
-        Returns:
-            tuple: (success, output_file_path)
-                success (bool): 是否成功完成推理
-                output_file_path (str): 输出音频文件路径，如果处理失败则为None
-        """
         try:
-            # 检查参考音频是否存在
-            if not os.path.exists(self.voice_path):
-                self.error.emit(f"参考音频文件不存在: {self.voice_path}")
-                return False, None
+            # 如果只有一个文件，直接复制
+            if len(input_files) == 1:
+                from shutil import copy2
+                copy2(input_files[0], output_file)
+                return output_file
             
-            # 检查文本是否为空
-            if not self.text.strip():
-                self.error.emit("推理文本不能为空")
-                return False, None
+            # 读取第一个文件以获取采样率
+            waveform, sample_rate = torchaudio.load(input_files[0])
             
-            # 加载替换规则
-            self.progress.emit("正在加载替换规则...")
-            replace_rules = self.load_replace_rules()
+            # 创建一个列表用于存储所有音频片段
+            waveforms = []
             
-            # 生成输出路径（如果未提供）
-            if not self.output_path:
-                # 创建输出目录（如果不存在）
-                output_dir = "outputs"
-                os.makedirs(output_dir, exist_ok=True)
-                # 为输出文件生成一个带时间戳的文件名
-                timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-                self.output_path = os.path.join(output_dir, f"output_{timestamp}.wav")
+            # 依次读取每个文件并添加到列表
+            for file_path in input_files:
+                # 检查文件是否存在且有效
+                if not os.path.exists(file_path) or os.path.getsize(file_path) == 0:
+                    print(f"警告: 跳过不存在或空的文件 {file_path}")
+                    continue
+                    
+                # 加载音频文件
+                try:
+                    current_waveform, current_sr = torchaudio.load(file_path)
+                    
+                    # 如果采样率不一致，则进行重采样
+                    if current_sr != sample_rate:
+                        resampler = torchaudio.transforms.Resample(current_sr, sample_rate)
+                        current_waveform = resampler(current_waveform)
+                    
+                    # 确保声道数一致
+                    if current_waveform.shape[0] != waveform.shape[0]:
+                        if current_waveform.shape[0] < waveform.shape[0]:
+                            # 如果声道数少，复制声道
+                            current_waveform = current_waveform.repeat(waveform.shape[0], 1)
+                        else:
+                            # 如果声道数多，只保留需要的声道数
+                            current_waveform = current_waveform[:waveform.shape[0], :]
+                    
+                    # 添加到列表
+                    waveforms.append(current_waveform)
+                except Exception as e:
+                    print(f"警告: 加载文件 {file_path} 出错: {e}")
+                    continue
+            
+            # 检查是否有可合并的波形
+            if not waveforms:
+                print("错误: 没有可合并的有效音频文件")
+                return None
+                
+            # 使用torch.cat沿时间维度合并所有波形
+            merged_waveform = torch.cat(waveforms, dim=1)
             
             # 确保输出目录存在
-            os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+            os.makedirs(os.path.dirname(output_file), exist_ok=True)
             
-            # 预处理文本
-            self.progress.emit("正在预处理文本...")
-            preprocessed_segments = self.preprocess_text(self.text)
+            # 保存合并后的文件
+            torchaudio.save(output_file, merged_waveform, sample_rate)
             
-            # 根据段落数量决定处理方式
-            if len(preprocessed_segments) > 1:
-                return self.process_text_in_segments(preprocessed_segments)
-            else:
-                # 作为单个文本处理
-                self.progress.emit("文本将作为整体处理...")
-                return self.process_single_text(self.text, self.output_path)
-            
+            return output_file
+        
         except Exception as e:
             import traceback
-            error_msg = f"处理推理任务时出错: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"合并音频文件时出错: {str(e)}\n{traceback.format_exc()}"
             print(error_msg)
-            self.error.emit(error_msg)
-            return False, None
-    
-    def load_replace_rules(self):
-        """加载文本替换规则"""
-        try:
-            if os.path.exists(self.REPLACE_CONFIG_PATH):
-                self.check_and_load_config()
-                return self.replace_rules
-            return []
-        except Exception as e:
-            print(f"加载替换规则出错: {str(e)}")
-            return []
+            return None
     
     def process_text_in_segments(self, preprocessed_segments=None):
         """按段落处理文本，返回(success, output_file_path)"""
         try:
             if preprocessed_segments is None:
-                preprocessed_segments = self.preprocess_text(self.text)
+                preprocessed_segments = TextProcessor.preprocess_text(
+                    self.text, self.punct_chars, self.replace_rules
+                )
             
             self.progress.emit(f"共分为 {len(preprocessed_segments)} 个片段进行处理...")
             temp_outputs = []
@@ -491,7 +380,7 @@ class InferenceWorker(QObject):
             segment_index = 0
             for i, segment in enumerate(preprocessed_segments):
                 # 检查是否请求停止
-                if self._stop_requested:
+                if self.is_stop_requested():
                     # 尝试保存部分结果
                     if self.save_partial_output(temp_outputs, silence_positions, preprocessed_segments):
                         return True, self.output_path
@@ -508,7 +397,8 @@ class InferenceWorker(QObject):
                     continue
                     
                 # 创建临时输出文件路径
-                temp_path = os.path.join("outputs", f"temp_{int(time.time())}_{segment_index}.wav")
+                temp_file_name = f"temp_{int(time.time())}_{uuid.uuid4().hex[:8]}_{segment_index}.wav"
+                temp_path = os.path.join(self.temp_dir, temp_file_name)
                 
                 self.progress.emit(f"处理第 {segment_index+1}/{len(preprocessed_segments) - len(silence_positions)} 段...")
                 self.tts.infer(self.voice_path, segment, temp_path)
@@ -516,7 +406,7 @@ class InferenceWorker(QObject):
                 segment_index += 1
             
             # 检查是否请求停止
-            if self._stop_requested:
+            if self.is_stop_requested():
                 # 尝试保存部分结果
                 if self.save_partial_output(temp_outputs, silence_positions, preprocessed_segments):
                     return True, self.output_path
@@ -549,7 +439,7 @@ class InferenceWorker(QObject):
         """处理单个文本片段，返回(success, output_file_path)"""
         try:
             # 检查是否请求停止
-            if self._stop_requested:
+            if self.is_stop_requested():
                 self.error.emit("推理已被用户中断")
                 return False, None
             
@@ -557,13 +447,13 @@ class InferenceWorker(QObject):
             
             # 应用文本替换规则（如果有）
             if self.replace_rules:
-                text = self.replace_text_by_config(text)
+                text = TextProcessor.apply_replace_rules(text, self.replace_rules)
             
             # 执行推理
             self.tts.infer(self.voice_path, text, output_path)
             
             # 最后检查一次是否请求停止
-            if self._stop_requested:
+            if self.is_stop_requested():
                 # 检查输出文件是否已经存在且有效
                 if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                     self.progress.emit("已保存生成结果")
@@ -582,8 +472,13 @@ class InferenceWorker(QObject):
             self.error.emit(error_msg)
             return False, None
 
+
 class MultiRoleInferenceWorker(QObject):
-    """多角色推理工作器类"""
+    """多角色推理工作器类
+    
+    注意：此类已被新的 ui.controllers.multi_role_worker.MultiRoleInferenceWorker 取代，
+    请使用新的实现代替。此类保留仅为向后兼容。
+    """
     
     # 定义信号
     finished = Signal(str)  # 参数为输出音频路径
@@ -616,7 +511,7 @@ class MultiRoleInferenceWorker(QObject):
         self.stop_requested = False
         self.mutex = QMutex()
         self.condition = QWaitCondition()
-    
+        
     def stop(self):
         """请求停止推理过程"""
         self.mutex.lock()
@@ -626,209 +521,28 @@ class MultiRoleInferenceWorker(QObject):
     
     def run(self):
         """执行多角色推理任务"""
-        try:
-            # 检查是否有有效的角色-文本对
-            if not self.role_text_pairs:
-                self.error.emit("没有有效的角色-文本对")
-                return
-            
-            # 用于存储每个角色生成的音频文件路径
-            audio_files = []
-            
-            # 对每个角色-文本对进行推理
-            for i, (role_name, text) in enumerate(self.role_text_pairs):
-                # 检查是否请求停止
-                self.mutex.lock()
-                if self.stop_requested:
-                    self.mutex.unlock()
-                    self.error.emit("推理已被用户中断")
-                    return
-                self.mutex.unlock()
-                
-                # 发送进度消息
-                self.progress.emit(f"正在处理角色 '{role_name}' 的文本 ({i+1}/{len(self.role_text_pairs)})")
-                
-                # 加载角色数据
-                character_data = self.character_manager.load_character(role_name)
-                if not character_data or "voice_path" not in character_data:
-                    self.error.emit(f"无法加载角色 '{role_name}' 或角色数据不完整")
-                    return
-                
-                voice_path = character_data["voice_path"]
-                if not os.path.exists(voice_path):
-                    self.error.emit(f"角色 '{role_name}' 的参考音频不存在: {voice_path}")
-                    return
-                
-                # 为当前角色生成一个临时输出文件
-                temp_output_path = os.path.join(self.temp_dir, f"{role_name}_{i}.wav")
-                
-                # 创建一个推理工作器来处理当前角色的文本
-                worker = InferenceWorker(
-                    self.tts,
-                    voice_path,
-                    text,
-                    output_path=temp_output_path,
-                    punct_chars=self.punct_chars,
-                    pause_time=self.pause_time
-                )
-                
-                # 连接信号（使用lambda闭包保留角色名）
-                role_name_capture = role_name  # 捕获当前迭代的角色名
-                worker.progress.connect(lambda msg, name=role_name_capture: self.progress.emit(f"[{name}] {msg}"))
-                
-                # 运行推理（同步）
-                success, output_file = worker.process_inference()
-                
-                if not success or not output_file or not os.path.exists(output_file):
-                    self.error.emit(f"处理角色 '{role_name}' 的文本时出错")
-                    return
-                
-                # 添加到音频文件列表
-                audio_files.append(output_file)
-            
-            # 检查是否至少有一个音频文件
-            if not audio_files:
-                self.error.emit("没有生成任何有效的音频文件")
-                return
-                
-            # 合并所有角色的音频文件
-            self.progress.emit("正在合并所有角色的音频文件...")
-            
-            # 生成最终输出文件名
-            # 使用第一个角色名和最后一个角色名组合
-            first_role = self.role_text_pairs[0][0]
-            last_role = self.role_text_pairs[-1][0]
-            combined_name = f"{first_role}"
-            if len(self.role_text_pairs) > 1:
-                combined_name += f"等{len(self.role_text_pairs)}人对话"
-            
-            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-            output_filename = f"[多角色][{timestamp}]{combined_name}"
-            output_path = os.path.join("outputs", f"{output_filename}.wav")
-            
-            # 确保输出目录存在
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            # 尝试合并音频
-            try:
-                merged_file = self.merge_audio_files(audio_files, output_path)
-                
-                if not merged_file or not os.path.exists(merged_file):
-                    # 如果合并失败但至少有一个音频文件，可以保存第一个音频文件作为最终输出
-                    if audio_files and os.path.exists(audio_files[0]):
-                        self.progress.emit("合并失败，保存第一个角色的音频作为输出...")
-                        import shutil
-                        shutil.copy2(audio_files[0], output_path)
-                        merged_file = output_path
-                    else:
-                        raise ValueError("合并音频文件失败且没有可用的备选音频")
-            except Exception as e:
-                import traceback
-                error_msg = f"合并音频文件时出错: {str(e)}\n{traceback.format_exc()}"
-                self.progress.emit("尝试保存单个角色音频文件...")
-                
-                # 保存第一个角色的音频作为输出
-                if audio_files and os.path.exists(audio_files[0]):
-                    try:
-                        self.progress.emit("合并失败，保存第一个角色的音频作为输出...")
-                        import shutil
-                        shutil.copy2(audio_files[0], output_path)
-                        merged_file = output_path
-                    except Exception as copy_error:
-                        self.error.emit(f"保存单个角色音频失败: {str(copy_error)}")
-                        return
-                else:
-                    self.error.emit(f"合并音频失败且没有可用的备选音频")
-                    return
-            
-            # 清理临时目录
-            self.cleanup_temp_files()
-            
-            # 发送完成信号
-            self.finished.emit(merged_file)
-            
-        except Exception as e:
-            import traceback
-            error_msg = f"多角色推理出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
-            
-            # 尝试清理临时文件
-            self.cleanup_temp_files()
-    
-    def merge_audio_files(self, audio_files, output_path):
-        """
-        合并多个WAV音频文件
+        from ui.controllers.multi_role_worker import MultiRoleInferenceWorker as NewMultiRoleWorker
         
-        Args:
-            audio_files (list): 要合并的WAV文件路径列表
-            output_path (str): 合并后的输出文件路径
-            
-        Returns:
-            str: 合并后的文件路径，如果失败则返回None
-        """
-        if not audio_files:
-            return None
+        self.progress.emit("正在使用新版多角色推理功能...")
         
-        try:
-            # 如果只有一个文件，直接复制
-            if len(audio_files) == 1:
-                from shutil import copy2
-                copy2(audio_files[0], output_path)
-                return output_path
-            
-            # 使用torchaudio合并音频文件
-            import torch
-            import torchaudio
-            
-            # 读取第一个文件以获取采样率
-            waveform, sample_rate = torchaudio.load(audio_files[0])
-            
-            # 创建一个列表用于存储所有音频片段
-            waveforms = []
-            
-            # 依次读取每个文件并添加到列表
-            for file_path in audio_files:
-                # 加载音频文件
-                current_waveform, current_sr = torchaudio.load(file_path)
-                
-                # 如果采样率不一致，则进行重采样
-                if current_sr != sample_rate:
-                    resampler = torchaudio.transforms.Resample(current_sr, sample_rate)
-                    current_waveform = resampler(current_waveform)
-                
-                # 确保声道数一致（使用第一个文件的声道数）
-                if current_waveform.shape[0] != waveform.shape[0]:
-                    # 如果当前文件声道数少于第一个文件，复制声道
-                    if current_waveform.shape[0] < waveform.shape[0]:
-                        current_waveform = current_waveform.repeat(waveform.shape[0], 1)
-                    # 如果当前文件声道数多于第一个文件，只保留需要的声道数
-                    else:
-                        current_waveform = current_waveform[:waveform.shape[0], :]
-                
-                # 添加到列表
-                waveforms.append(current_waveform)
-            
-            # 使用torch.cat沿时间维度合并所有波形
-            merged_waveform = torch.cat(waveforms, dim=1)
-            
-            # 保存合并后的文件
-            torchaudio.save(output_path, merged_waveform, sample_rate)
-            
-            return output_path
+        # 创建新的多角色工作器
+        worker = NewMultiRoleWorker(
+            tts=self.tts,
+            character_manager=self.character_manager,
+            role_text_pairs=self.role_text_pairs,
+            punct_chars=self.punct_chars,
+            pause_time=self.pause_time
+        )
         
-        except Exception as e:
-            import traceback
-            error_msg = f"合并音频文件时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(f"合并音频文件时出错: {str(e)}")
-            return None
-    
-    def cleanup_temp_files(self):
-        """清理临时文件和目录"""
-        try:
-            import shutil
-            if os.path.exists(self.temp_dir):
-                shutil.rmtree(self.temp_dir, ignore_errors=True)
-        except Exception as e:
-            print(f"清理临时文件时出错: {str(e)}") 
+        # 连接信号
+        worker.progress.connect(self.progress.emit)
+        worker.error.connect(self.error.emit)
+        
+        # 执行推理
+        success, output_file = worker.process_inference()
+        
+        # 处理结果
+        if success and output_file:
+            self.finished.emit(output_file)
+        else:
+            self.error.emit("多角色推理失败") 

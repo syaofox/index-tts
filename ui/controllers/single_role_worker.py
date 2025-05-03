@@ -62,6 +62,10 @@ class SingleRoleInferenceWorker(InferenceBase):
                 self.error.emit("推理文本不能为空")
                 return False, None
             
+            # 生成输出路径（如果未提供）
+            if not self.output_path:
+                self.output_path = self.generate_output_path()
+            
             # 预处理文本
             self.progress.emit("正在预处理文本...")
             segments = TextProcessor.preprocess_text(
@@ -77,9 +81,7 @@ class SingleRoleInferenceWorker(InferenceBase):
                 return self.process_single_text(self.text)
             
         except Exception as e:
-            error_msg = f"处理推理任务时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, "处理推理任务")
             return False, None
     
     def process_text_in_segments(self, segments: List[str]) -> Tuple[bool, Optional[str]]:
@@ -94,9 +96,7 @@ class SingleRoleInferenceWorker(InferenceBase):
         """
         try:
             # 确保临时目录存在
-            if not self.temp_dir or not os.path.exists(self.temp_dir):
-                self.temp_dir = os.path.join("outputs", "temp")
-                self.ensure_dir_exists(self.temp_dir)
+            self.ensure_dir_exists(self.temp_dir)
             
             # 计算实际处理的片段数（不包括<br>标记）
             actual_segments = [s for s in segments if s != TextProcessor.BR_TAG and s.strip()]
@@ -124,9 +124,8 @@ class SingleRoleInferenceWorker(InferenceBase):
                 if not segment.strip():  # 跳过空片段
                     continue
                     
-                # 创建临时输出文件路径（使用时间戳和UUID确保唯一）
-                temp_file_name = f"temp_{int(time.time())}_{uuid.uuid4().hex[:8]}_{segment_index}.wav"
-                temp_path = os.path.join(self.temp_dir, temp_file_name)
+                # 创建临时输出文件路径
+                temp_path = self.create_temp_file_path(segment_index)
                 
                 self.progress.emit(f"处理第 {segment_index+1}/{len(actual_segments)} 段: {segment[:20]}...")
                 
@@ -181,9 +180,7 @@ class SingleRoleInferenceWorker(InferenceBase):
                 return False, None
             
         except Exception as e:
-            error_msg = f"按段落处理文本时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, "按段落处理文本")
             return False, None
     
     def process_single_text(self, text: str) -> Tuple[bool, Optional[str]]:
@@ -228,9 +225,7 @@ class SingleRoleInferenceWorker(InferenceBase):
             return True, self.output_path
             
         except Exception as e:
-            error_msg = f"处理单个文本片段时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            self.error.emit(error_msg)
+            error_msg = self.handle_exception(e, "处理单个文本片段")
             return False, None
             
     def save_partial_output(self, temp_outputs, silence_positions, segments) -> Optional[str]:
