@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
 from ui.views.audio_player import AudioPlayer
 from ui.views.custom_widgets import DropFileButton
 from ui.models.character_manager import CharacterManager
-from ui.utils.text_processor import TextProcessor
+from ui.models.text_processor import TextProcessor
 from ui.controllers.single_role_inference import SingleRoleInference
 from ui.controllers.multi_role_inference import MultiRoleInference
 from ui.config import REPLACE_RULES_CONFIG_PATH, AUDIO_PLAYER_PATH, DEFAULT_PUNCT_CHARS, DEFAULT_PAUSE_TIME

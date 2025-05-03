@@ -6,6 +6,7 @@ from ui.models.audio_processor import AudioProcessor
 from ui.models.file_manager import FileManager
 from ui.models.text_processor import TextProcessor
 from ui.models.config_manager import ConfigManager
+from ui.models.inference_processor import InferenceProcessor
 from ui.models.inference_strategy import (
     InferenceStrategy, 
     NormalInferenceStrategy,
@@ -19,6 +20,7 @@ __all__ = [
     'FileManager',
     'TextProcessor',
     'ConfigManager',
+    'InferenceProcessor',
     'InferenceStrategy',
     'NormalInferenceStrategy',
     'FastInferenceStrategy',
