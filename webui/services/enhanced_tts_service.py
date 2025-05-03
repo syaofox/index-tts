@@ -8,6 +8,7 @@
 import os
 import torch
 import torchaudio
+import time
 
 # 导入相关模块
 from ui.models.character_manager import CharacterManager
@@ -77,6 +78,29 @@ class EnhancedTTSService:
                 # 单角色处理，取出文本内容
                 _, content = role_text_pairs[0]
                 print(f"单角色处理，文本长度: {len(content)} 字符")
+                
+                # 自定义文件名（如果未提供有效的路径或是默认路径）
+                if not output_path or output_path.endswith("output.wav"):
+                    # 从提示音频路径中提取角色名（如果可能）
+                    prompt_filename = os.path.basename(prompt_path)
+                    speaker_name = os.path.splitext(prompt_filename)[0]
+                    
+                    # 清理文本内容（取前50个字符）
+                    text_sample = content.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                    # 替换Windows文件名中的非法字符
+                    for char in '\\/:"*?<>|':
+                        text_sample = text_sample.replace(char, "_")
+                    text_sample = text_sample[:50]  # 限制长度
+                    
+                    # 添加时间戳
+                    timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+                    output_filename = f"[{speaker_name}][{timestamp}]{text_sample}"
+                    output_path = os.path.join("outputs", f"{output_filename}.wav")
+                    
+                    # 确保输出目录存在
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    print(f"已生成自定义输出文件名: {output_path}")
+                
                 return self.generate_with_segments(prompt_path, content, output_path, mode, punct_chars, pause_time)
         except Exception as e:
             print(f"生成语音出错: {e}")
@@ -170,6 +194,23 @@ class EnhancedTTSService:
         """
         # 需要角色管理器来获取角色音频
         character_manager = CharacterManager("prompts")
+        
+        # 生成自定义的输出文件名，使用角色名和时间戳
+        if not output_path or output_path.endswith("output.wav"):
+            # 使用第一个角色名和总角色数
+            first_role = role_text_pairs[0][0]
+            combined_name = f"{first_role}"
+            if len(role_text_pairs) > 1:
+                combined_name += f"等{len(role_text_pairs)}人对话"
+            
+            # 添加时间戳
+            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+            output_filename = f"[多角色][{timestamp}]{combined_name}"
+            output_path = os.path.join("outputs", f"{output_filename}.wav")
+            
+            # 确保输出目录存在
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            print(f"已生成自定义输出文件名: {output_path}")
         
         role_audio_files = []
         

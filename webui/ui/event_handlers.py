@@ -54,7 +54,8 @@ class EventHandlers:
                 print(f"处理提示文件路径时出错: {e}")
                 return gr.update(value=None, visible=True)
         
-        output_path = os.path.join(self.settings.outputs_dir, f"spk_{int(time.time())}.wav")
+        # 使用"output.wav"作为输出路径，让enhanced_tts_service.py中的自定义命名逻辑生效
+        output_path = os.path.join(self.settings.outputs_dir, "output.wav")
         
         # 使用增强的TTS服务生成音频
         result = self.enhanced_tts_service.generate(

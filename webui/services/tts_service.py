@@ -59,8 +59,8 @@ class TTSService:
         
         # 确保输出路径存在
         if not output_path:
-            timestamp = int(time.time())
-            output_path = os.path.join("outputs", f"spk_{timestamp}.wav")
+            # 使用固定的"output.wav"以便上层服务可以应用自定义命名逻辑
+            output_path = os.path.join("outputs", "output.wav")
         
         # 设置进度回调
         if progress:
