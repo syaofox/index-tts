@@ -387,6 +387,7 @@ class MainWindow(QMainWindow):
         # 添加快速推理复选框
         self.fast_mode_checkbox = QCheckBox("快速推理")
         self.fast_mode_checkbox.setToolTip("开启快速推理模式，推理速度更快但可能有轻微音质下降")
+        self.fast_mode_checkbox.stateChanged.connect(self.onFastModeChanged)
         text_split_layout.addWidget(self.fast_mode_checkbox)
         
         text_split_layout.addStretch(1)
@@ -434,6 +435,9 @@ class MainWindow(QMainWindow):
         
         # 更新角色下拉列表
         self.updateCharacterComboBox()
+        
+        # 初始化快速推理模式的状态，确保界面显示与复选框状态一致
+        self.onFastModeChanged(self.fast_mode_checkbox.checkState())
     
     def loadHistoryAudio(self):
         """加载历史音频文件列表"""
@@ -702,7 +706,13 @@ class MainWindow(QMainWindow):
         role_text_pairs = self.parseMultiRoleText(text)
         
         # 获取标点符号和停顿时间
-        punct_chars = self.punct_edit.toPlainText()
+        # 快速推理模式下忽略标点符号分割，只使用换行符
+        is_fast_mode = self.fast_mode_checkbox.isChecked()
+        if is_fast_mode:
+            punct_chars = ""  # 空字符串表示不使用标点符号分割
+            print("快速推理模式：仅使用换行符分割文本")
+        else:
+            punct_chars = self.punct_edit.toPlainText()
         
         # 获取停顿时间并验证
         try:
@@ -714,7 +724,7 @@ class MainWindow(QMainWindow):
             return
         
         # 获取推理模式
-        infer_mode = "fast" if self.fast_mode_checkbox.isChecked() else "normal"
+        infer_mode = "fast" if is_fast_mode else "normal"
         print(f"推理模式: {infer_mode}")
         
         # 停止所有音频播放
@@ -877,9 +887,12 @@ class MainWindow(QMainWindow):
         
         # 禁用/启用文本编辑区域
         self.text_edit.setEnabled(not disable)
-        self.punct_edit.setEnabled(not disable)
+        self.punct_edit.setEnabled(not disable and not self.fast_mode_checkbox.isChecked())
         self.pause_edit.setEnabled(not disable)
         self.fast_mode_checkbox.setEnabled(not disable)
+        
+        # 信息标签始终保持可见（如果需要显示）
+        # 不要变更其可见性状态
         
         # 禁用/启用历史列表
         self.history_list.setEnabled(not disable)
@@ -1128,4 +1141,30 @@ class MainWindow(QMainWindow):
         cursor.insertText(f"<{character_name}>\n")
         
         # 设置焦点回到文本编辑器
-        self.text_edit.setFocus() 
+        self.text_edit.setFocus()
+    
+    def onFastModeChanged(self, state):
+        """处理快速推理复选框状态变更"""
+        # 使用更可靠的方式检测复选框状态
+        is_fast_mode = self.fast_mode_checkbox.isChecked()
+        print(f"快速推理状态变更: {'启用' if is_fast_mode else '禁用'}, state={state}")
+        
+        # 当快速推理模式启用时，禁用分割标点输入框
+        self.punct_edit.setEnabled(not is_fast_mode)
+        
+        # 如果启用了快速模式，显示提示信息
+        if is_fast_mode:
+            self.punct_edit.setPlaceholderText("快速模式下仅按换行分割")
+            # 在状态栏显示提示
+            self.statusBar().showMessage("快速推理模式已启用：文本将只按换行符分割，不再按标点分割", 5000)
+           
+            # 保存原始标点符号，以便在禁用快速模式时恢复
+            if not hasattr(self, '_original_punct'):
+                self._original_punct = self.punct_edit.toPlainText()
+            self.punct_edit.clear()
+        else:
+            # 恢复原始标点符号
+            self.punct_edit.setPlaceholderText("例如: 。？！，；")
+            self.statusBar().showMessage("标准推理模式已启用：文本将按标点和换行符分割", 5000)  
+            if hasattr(self, '_original_punct'):
+                self.punct_edit.setText(self._original_punct) 

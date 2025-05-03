@@ -171,11 +171,11 @@ class TextProcessor:
         1. 应用文本替换规则（如果有）
         2. 按段落分割
         3. 将空行替换为<br>标记
-        4. 对非<br>段落按标点符号分割
+        4. 对非<br>段落按标点符号分割（仅当punct_chars不为空时）
         
         Args:
             text: 输入文本
-            punct_chars: 分割标点符号
+            punct_chars: 分割标点符号，为空时仅使用换行符分割
             replace_rules: 文本替换规则列表
             
         Returns:
@@ -187,6 +187,11 @@ class TextProcessor:
         
         # 分割段落并处理空行
         paragraphs = TextProcessor.split_text_by_newlines_with_br(text)
+        
+        # 当punct_chars为空时，跳过标点分割，只保留段落分割
+        if not punct_chars:
+            print("标点符号列表为空，仅使用换行符分割文本")
+            return paragraphs
         
         # 对每个段落，如果不是<br>标记，则按标点分割
         segments = []
