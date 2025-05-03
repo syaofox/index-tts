@@ -4,245 +4,16 @@
 
 import os
 import time
-import re
-from pathlib import Path
-import tempfile
-import uuid
-import wave
-import numpy as np
-import contextlib
-import torch
 from typing import List, Tuple, Dict, Optional, Any
 
-from PySide6.QtCore import QObject, Signal, QMutex, QWaitCondition
+from PySide6.QtCore import QObject, Signal
 from ui.controllers.inference_base import InferenceBase
 from ui.controllers.multi_role_inference import MultiRoleInference
-from ui.utils.text_processor import TextProcessor
+from ui.models.text_processor import TextProcessor
+from ui.models.audio_processor import AudioProcessor
+from ui.models.file_manager import FileManager
+from ui.models.config_manager import ConfigManager
 from ui.config import REPLACE_RULES_CONFIG_PATH
-
-
-class ConfigManager:
-    """配置管理器类
-    负责处理配置文件的加载和缓存
-    """
-    # 类级别的配置缓存
-    _replace_rules_cache = []  # 缓存的替换规则
-    _config_last_modified = 0  # 配置文件最后修改时间
-    
-    @classmethod
-    def load_replace_rules(cls, config_path):
-        """加载文本替换规则，根据文件修改时间决定是否使用缓存"""
-        if not os.path.exists(config_path):
-            return []
-            
-        # 获取文件最后修改时间
-        current_mtime = os.path.getmtime(config_path)
-        
-        # 检查是否需要重新加载
-        if current_mtime > cls._config_last_modified or not cls._replace_rules_cache:
-            rules = TextProcessor.load_replace_rules_from_file(config_path)
-            # 更新类级别的缓存
-            cls._replace_rules_cache = rules.copy()
-            cls._config_last_modified = current_mtime
-            print(f"配置文件已更新，重新加载 {len(rules)} 条规则")
-            return rules
-        else:
-            # 使用缓存的规则
-            print(f"使用缓存的 {len(cls._replace_rules_cache)} 条替换规则")
-            return cls._replace_rules_cache.copy()
-
-
-class AudioProcessor:
-    """音频处理器类
-    负责所有与音频处理相关的操作，如合并、创建静音等
-    """
-    @staticmethod
-    def create_silence(duration, sample_rate):
-        """创建指定时长的静音"""
-        import torch
-        # 计算样本数
-        num_samples = int(duration * sample_rate)
-        # 创建静音波形 (通道数, 样本数)
-        silence = torch.zeros(1, num_samples, dtype=torch.int16)
-        return silence
-    
-    @staticmethod
-    def normalize_audio_data(audio_data, sample_rate):
-        """规范化音频数据为(通道数, 样本数)格式的torch.Tensor"""
-        import torch
-        import numpy as np
-        
-        try:
-            if isinstance(audio_data, np.ndarray):
-                # 如果是numpy数组
-                if len(audio_data.shape) == 1:
-                    # 单声道，形状为(样本数,)
-                    # 转换为(1, 样本数)的格式
-                    audio_tensor = torch.from_numpy(audio_data).unsqueeze(0)
-                elif len(audio_data.shape) > 1:
-                    # 多声道，检查是否需要转置
-                    if audio_data.shape[1] > audio_data.shape[0] or audio_data.shape[1] <= 8:
-                        # 很可能是(样本数, 通道数)格式，需要转置为(通道数, 样本数)
-                        audio_tensor = torch.from_numpy(audio_data.T)
-                    else:
-                        # 可能已经是(通道数, 样本数)格式
-                        audio_tensor = torch.from_numpy(audio_data)
-            elif isinstance(audio_data, torch.Tensor):
-                # 如果是torch.Tensor
-                if len(audio_data.shape) == 1:
-                    # 单声道，形状为(样本数,)
-                    # 转换为(1, 样本数)的格式
-                    audio_tensor = audio_data.unsqueeze(0)
-                else:
-                    # 已经是多维tensor，假设格式正确
-                    audio_tensor = audio_data
-            else:
-                # 不支持的类型
-                raise ValueError(f"不支持的音频数据类型: {type(audio_data)}")
-            
-            # 确保数据类型为int16
-            if audio_tensor.dtype != torch.int16:
-                # 如果是浮点类型且范围在[-1, 1]，缩放到int16范围
-                if audio_tensor.dtype in [torch.float32, torch.float64] and audio_tensor.abs().max() <= 1.0:
-                    audio_tensor = (audio_tensor * 32767).to(torch.int16)
-                else:
-                    audio_tensor = audio_tensor.to(torch.int16)
-            
-            return audio_tensor, sample_rate
-            
-        except Exception as e:
-            import traceback
-            error_msg = f"规范化音频数据时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            return None, None
-    
-    @staticmethod
-    def merge_audio_data_with_br(audio_segments, silence_positions, pause_time, sample_rate):
-        """在内存中合并音频数据，在<br>标记处添加静音"""
-        import torch
-        
-        # 检查是否有音频数据
-        if not audio_segments:
-            raise ValueError("没有音频数据可合并")
-        
-        # 创建输出波形列表
-        output_waveforms = []
-        
-        # 按照原始段落索引排序音频片段
-        sorted_outputs = sorted(audio_segments, key=lambda x: x[0])
-        
-        # 处理所有片段，包括添加<br>对应的静音
-        last_index = -1
-        for segment_index, wave_data in sorted_outputs:
-            # 处理中间的<br>标记
-            for silence_pos in silence_positions:
-                if last_index < silence_pos < segment_index:
-                    # 为每个<br>添加一个静音
-                    silence = AudioProcessor.create_silence(pause_time, sample_rate)
-                    output_waveforms.append(silence)
-            
-            # 规范化当前段落的音频
-            norm_wave, _ = AudioProcessor.normalize_audio_data(wave_data, sample_rate)
-            if norm_wave is not None:
-                # 添加当前段落的音频
-                output_waveforms.append(norm_wave)
-            
-            # 添加静音
-            silence = AudioProcessor.create_silence(pause_time/2, sample_rate)
-            output_waveforms.append(silence)
-            
-            # 更新最后处理的索引
-            last_index = segment_index
-        
-        # 处理末尾的<br>标记
-        for silence_pos in silence_positions:
-            if silence_pos > last_index:
-                silence = AudioProcessor.create_silence(pause_time, sample_rate)
-                output_waveforms.append(silence)
-        
-        # 检查是否有波形需要合并
-        if not output_waveforms:
-            raise ValueError("没有可合并的音频片段")
-        
-        # 合并所有波形
-        merged_waveform = torch.cat(output_waveforms, dim=1)
-        
-        return merged_waveform, sample_rate
-    
-    @staticmethod
-    def merge_audio_data(audio_segments, sample_rate):
-        """在内存中合并多个音频数据"""
-        import torch
-        
-        if not audio_segments:
-            return None, None
-        
-        try:
-            # 规范化所有音频片段
-            normalized_segments = []
-            for audio_data in audio_segments:
-                norm_data, _ = AudioProcessor.normalize_audio_data(audio_data, sample_rate)
-                if norm_data is not None:
-                    normalized_segments.append(norm_data)
-            
-            if not normalized_segments:
-                print("错误: 没有可合并的有效音频数据")
-                return None, None
-            
-            # 确保所有波形具有相同的通道数
-            num_channels = normalized_segments[0].shape[0]
-            
-            # 创建一个列表用于存储所有处理后的音频片段
-            processed_waveforms = []
-            
-            # 依次处理每个波形
-            for waveform in normalized_segments:
-                # 确保声道数一致
-                if waveform.shape[0] != num_channels:
-                    if waveform.shape[0] < num_channels:
-                        # 如果声道数少，复制声道
-                        waveform = waveform.repeat(num_channels, 1)
-                    else:
-                        # 如果声道数多，只保留需要的声道数
-                        waveform = waveform[:num_channels, :]
-                
-                # 添加到列表
-                processed_waveforms.append(waveform)
-            
-            # 使用torch.cat沿时间维度合并所有波形
-            merged_waveform = torch.cat(processed_waveforms, dim=1)
-            
-            return merged_waveform, sample_rate
-            
-        except Exception as e:
-            import traceback
-            error_msg = f"合并音频数据时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            return None, None
-    
-    @staticmethod
-    def save_audio_to_file(waveform, sample_rate, output_path):
-        """将内存中的音频保存到文件"""
-        try:
-            # 确保输出目录存在
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            
-            # 规范化音频数据
-            normalized_wave, _ = AudioProcessor.normalize_audio_data(waveform, sample_rate)
-            if normalized_wave is None:
-                return None
-            
-            # 保存合并后的文件
-            import torchaudio
-            torchaudio.save(output_path, normalized_wave, sample_rate)
-            
-            return output_path
-        
-        except Exception as e:
-            import traceback
-            error_msg = f"保存音频文件时出错: {str(e)}\n{traceback.format_exc()}"
-            print(error_msg)
-            return None
 
 
 class InferenceWorker(QObject):
@@ -317,8 +88,8 @@ class InferenceWorker(QObject):
         """
         try:
             # 检查参考音频是否存在
-            if not os.path.exists(self.voice_path):
-                self.error.emit(f"参考音频文件不存在: {self.voice_path}")
+            if not FileManager.is_valid_audio_file(self.voice_path):
+                self.error.emit(f"参考音频文件不存在或无效: {self.voice_path}")
                 return False, None
             
             # 检查文本是否为空
@@ -328,16 +99,10 @@ class InferenceWorker(QObject):
             
             # 生成输出路径（如果未提供）
             if not self.output_path:
-                # 创建输出目录（如果不存在）
-                output_dir = "outputs"
-                if not os.path.exists(output_dir):
-                    os.makedirs(output_dir, exist_ok=True)
-                # 为输出文件生成一个带时间戳的文件名
-                timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-                self.output_path = os.path.join(output_dir, f"output_{timestamp}.wav")
+                self.output_path = FileManager.generate_output_path()
             
             # 确保输出目录存在
-            os.makedirs(os.path.dirname(self.output_path), exist_ok=True)
+            FileManager.ensure_dir_exists(os.path.dirname(self.output_path))
             
             # 预处理文本
             self.progress.emit("正在预处理文本...")
@@ -367,16 +132,13 @@ class InferenceWorker(QObject):
             
         self.progress.emit("正在合并已生成的部分内容...")
         try:
-            # 获取基础文件名（如果有）
-            base_output_path = self.output_path
-            base_filename = os.path.splitext(os.path.basename(base_output_path))[0]
-            # 添加部分输出标记，保持文件名格式一致
-            partial_output_path = os.path.join("outputs", f"{base_filename}_部分.wav")
+            # 创建部分输出路径
+            partial_output_path = FileManager.get_partial_output_path(self.output_path, "_部分")
             
             self.progress.emit(f"正在合并 {len(temp_outputs)} 个已生成的片段...")
             
             # 使用内存模式合并音频
-            merged_wave, sr = AudioProcessor.merge_audio_data_with_br(
+            merged_wave, sr = AudioProcessor.merge_audio_with_silence(
                 temp_outputs, silence_positions, self.pause_time, 24000
             )
             
@@ -393,18 +155,14 @@ class InferenceWorker(QObject):
             if temp_outputs:
                 try:
                     _, last_wave = temp_outputs[-1]
-                    # 获取基础文件名（如果有）
-                    base_output_path = self.output_path
-                    base_filename = os.path.splitext(os.path.basename(base_output_path))[0]
-                    # 添加部分输出标记，保持文件名格式一致
-                    partial_output_path = os.path.join("outputs", f"{base_filename}_最后片段.wav")
+                    # 创建最后片段输出路径
+                    last_output_path = FileManager.get_partial_output_path(self.output_path, "_最后片段")
                     
                     self.progress.emit("合并失败，尝试保存最后生成的片段...")
-                    import torchaudio
-                    torchaudio.save(partial_output_path, last_wave, 24000)
+                    AudioProcessor.save_audio_to_file(last_wave, 24000, last_output_path)
                     
-                    self.progress.emit(f"已保存部分结果: {os.path.basename(partial_output_path)}")
-                    self.finished.emit(partial_output_path)
+                    self.progress.emit(f"已保存部分结果: {os.path.basename(last_output_path)}")
+                    self.finished.emit(last_output_path)
                     return True
                 except Exception as e2:
                     print(f"保存最后一个片段出错: {str(e2)}")
@@ -477,7 +235,7 @@ class InferenceWorker(QObject):
             self.progress.emit(f"合并音频片段，添加段落间静音 ({self.pause_time}秒)...")
             
             # 使用内存模式合并音频
-            merged_wave, sr = AudioProcessor.merge_audio_data_with_br(
+            merged_wave, sr = AudioProcessor.merge_audio_with_silence(
                 temp_outputs, silence_positions, self.pause_time, 24000
             )
             

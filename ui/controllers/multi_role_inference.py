@@ -1,26 +1,23 @@
-"""多角色推理模块
-提供多角色TTS推理的功能。
+"""多角色推理控制器
+提供多角色TTS推理的流程控制。
 """
 
 import os
-import shutil
-import torch
-import torchaudio
-import numpy as np
 from typing import List, Tuple, Optional
 
 from ui.controllers.inference_base import InferenceBase
 from ui.controllers.single_role_inference import SingleRoleInference
-from ui.utils.text_processor import TextProcessor
+from ui.models.audio_processor import AudioProcessor
+from ui.models.text_processor import TextProcessor
 
 
 class MultiRoleInference(InferenceBase):
-    """多角色推理类"""
+    """多角色推理控制器"""
     
     def __init__(self, tts, character_manager, role_text_pairs, 
                  output_path=None, punct_chars="。？！", pause_time=0.3, replace_rules=None, infer_mode="normal"):
         """
-        初始化多角色推理器
+        初始化多角色推理控制器
         
         Args:
             tts: TTS模型对象
@@ -97,7 +94,7 @@ class MultiRoleInference(InferenceBase):
             self.progress.emit(f"正在合并 {len(audio_segments)} 个角色的音频数据...")
             
             # 在内存中合并音频
-            merged_wave, merged_sr = self.merge_audio_data(audio_segments, sample_rate)
+            merged_wave, merged_sr = AudioProcessor.merge_audio_data(audio_segments, sample_rate)
             
             if merged_wave is None:
                 self.error.emit("合并音频数据失败")
@@ -155,7 +152,7 @@ class MultiRoleInference(InferenceBase):
                 self.error.emit(f"角色 '{role_name}' 的参考音频不存在: {voice_path}")
                 return None
             
-            # 创建单角色推理器，但不要启动新线程
+            # 创建单角色推理控制器，但不要启动新线程
             inference = SingleRoleInference(
                 self.tts,
                 voice_path,

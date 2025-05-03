@@ -1,23 +1,26 @@
-"""单角色推理模块
-提供单一角色的TTS推理功能。
+"""单角色推理控制器
+提供单一角色的TTS推理流程控制。
 """
 
 import os
-import time
-import torch
 from typing import Tuple, List, Optional
 
-from ui.controllers.inference_base import InferenceBase, InferenceStrategyFactory
-from ui.utils.text_processor import TextProcessor
+from PySide6.QtCore import QObject, Signal
+
+from ui.controllers.inference_base import InferenceBase
+from ui.models.audio_processor import AudioProcessor
+from ui.models.file_manager import FileManager
+from ui.models.text_processor import TextProcessor
+from ui.models.inference_strategy import InferenceStrategyFactory
 
 
 class SingleRoleInference(InferenceBase):
-    """单角色推理类，处理单一角色的语音生成"""
+    """单角色推理控制器，处理单一角色的语音生成流程"""
     
     def __init__(self, tts, voice_path, text, output_path=None, 
                  punct_chars="。？！", pause_time=0.3, replace_rules=None, infer_mode="normal"):
         """
-        初始化单角色推理器
+        初始化单角色推理控制器
         
         Args:
             tts: TTS模型对象
@@ -46,8 +49,8 @@ class SingleRoleInference(InferenceBase):
         """
         try:
             # 检查参考音频是否存在
-            if not os.path.exists(self.voice_path):
-                self.error.emit(f"参考音频文件不存在: {self.voice_path}")
+            if not FileManager.is_valid_audio_file(self.voice_path):
+                self.error.emit(f"参考音频文件不存在或无效: {self.voice_path}")
                 return False, None
             
             # 检查文本是否为空
@@ -119,7 +122,7 @@ class SingleRoleInference(InferenceBase):
                         # 成功获取内存数据
                         sample_rate, wave_data = result
                         if sample_rate is not None and wave_data is not None:
-                            # 添加到临时输出列表，不再进行格式转换，统一在处理阶段进行
+                            # 添加到临时输出列表
                             temp_outputs.append((i, wave_data))
                         else:
                             self.progress.emit(f"警告: 段落 {segment_index+1} 未生成有效音频")
@@ -147,7 +150,9 @@ class SingleRoleInference(InferenceBase):
             
             # 使用内存模式合并音频
             sample_rate = 24000  # 假设使用默认采样率
-            merged_wave, sr = self.merge_audio_with_silence(temp_outputs, silence_positions, sample_rate)
+            merged_wave, sr = AudioProcessor.merge_audio_with_silence(
+                temp_outputs, silence_positions, self.pause_time, sample_rate
+            )
             
             if merged_wave is None:
                 self.error.emit("合并音频数据失败")
