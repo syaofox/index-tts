@@ -89,6 +89,10 @@ class TextProcessor:
         """
         if not text:
             return []
+
+        # 如果标点符号为空，说明是快速模式，则不进行分割
+        if not punct_chars:
+            return [text]
             
         # 构建用于分割的正则表达式
         pattern = f"([{re.escape(punct_chars)}])"
