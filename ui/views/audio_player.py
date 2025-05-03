@@ -26,7 +26,7 @@ class AudioPlayer(QWidget):
     line_width = 1
     pen_line_width = 0.8
     bar_width = 1  # 柱状图宽度
-
+    played_color = (255, 165, 0)  # 已播放部分的橙色
 
     def __init__(self, label="音频播放器", parent=None, waveform_height=40, 
                  background_color='w', foreground_color='k', 
@@ -53,6 +53,8 @@ class AudioPlayer(QWidget):
         self.waveformCurve = None
         self.waveformBarsPositive = None  # 正值柱状图
         self.waveformBarsNegative = None  # 负值柱状图
+        self.waveformBarsPositivePlayed = None  # 已播放的正值柱状图
+        self.waveformBarsNegativePlayed = None  # 已播放的负值柱状图
         self.positionLine = None
         self.centerLine = None  # 中轴线
         self.audio_data = None
@@ -123,12 +125,17 @@ class AudioPlayer(QWidget):
         # 设置ViewBox的范围，同时设置padding为0
         self.waveformPlot.getPlotItem().getViewBox().setRange(xRange=[0, 1], yRange=[-1, 1], padding=0)
 
-        # 初始化柱状图数据
-        # 创建柱状图对象 - 正值和负值分别使用不同的柱状图
+        # 初始化柱状图对象 - 包括未播放和已播放部分
         self.waveformBarsPositive = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.waveform_color, pen=None)
         self.waveformBarsNegative = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.waveform_color, pen=None)
+        self.waveformBarsPositivePlayed = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.played_color, pen=None)
+        self.waveformBarsNegativePlayed = pg.BarGraphItem(x=[], height=[], width=self.bar_width, brush=self.played_color, pen=None)
+        
+        # 添加所有柱状图到波形图
         self.waveformPlot.addItem(self.waveformBarsPositive)
         self.waveformPlot.addItem(self.waveformBarsNegative)
+        self.waveformPlot.addItem(self.waveformBarsPositivePlayed)
+        self.waveformPlot.addItem(self.waveformBarsNegativePlayed)
         
         # 添加位置线
         self.positionLine = pg.InfiniteLine(pos=0, angle=90, pen=pg.mkPen(color=self.position_line_color, line_width=self.pen_line_width))
@@ -316,9 +323,11 @@ class AudioPlayer(QWidget):
         # 清除波形图
         if self.waveformBarsPositive is not None and self.waveformBarsNegative is not None:
             try:
-                # 清除柱状图数据
+                # 清除所有柱状图数据
                 self.waveformBarsPositive.setOpts(x=[], height=[])
                 self.waveformBarsNegative.setOpts(x=[], height=[])
+                self.waveformBarsPositivePlayed.setOpts(x=[], height=[])
+                self.waveformBarsNegativePlayed.setOpts(x=[], height=[])
                 if self.positionLine is not None:
                     self.positionLine.setValue(0)
                 # 中轴线不需要重置，它始终在y=0位置
@@ -359,17 +368,52 @@ class AudioPlayer(QWidget):
         total = self.formatTime(self.duration)
         self.timeLabel.setText(f"{current} / {total}")
         
-        # 更新波形图位置线
+        # 更新波形图位置线和已播放部分的波形
         if self.audio_data is not None and self.duration > 0:
             try:
                 # 计算当前位置对应的波形图x轴位置
                 if len(self.audio_data) > 0:
                     position_ratio = position / self.duration
                     position_x = len(self.audio_data) * position_ratio
+                    
+                    # 更新位置线
                     if self.positionLine is not None:
                         self.positionLine.setValue(position_x)
+                    
+                    # 更新已播放部分的波形
+                    # 获取到当前位置的音频数据
+                    played_data = self.audio_data[:int(position_x)]
+                    remaining_data = self.audio_data[int(position_x):]
+                    
+                    # 分离已播放部分的正负值
+                    played_positive_mask = played_data >= 0
+                    played_negative_mask = played_data < 0
+                    
+                    # 分离未播放部分的正负值
+                    remaining_positive_mask = remaining_data >= 0
+                    remaining_negative_mask = remaining_data < 0
+                    
+                    # 更新已播放部分的柱状图
+                    x_played_positive = np.arange(len(played_data))[played_positive_mask]
+                    height_played_positive = played_data[played_positive_mask]
+                    self.waveformBarsPositivePlayed.setOpts(x=x_played_positive, height=height_played_positive)
+                    
+                    x_played_negative = np.arange(len(played_data))[played_negative_mask]
+                    height_played_negative = played_data[played_negative_mask]
+                    self.waveformBarsNegativePlayed.setOpts(x=x_played_negative, height=height_played_negative)
+                    
+                    # 更新未播放部分的柱状图
+                    x_remaining_positive = np.arange(int(position_x), len(self.audio_data))[remaining_positive_mask]
+                    height_remaining_positive = remaining_data[remaining_positive_mask]
+                    self.waveformBarsPositive.setOpts(x=x_remaining_positive, height=height_remaining_positive)
+                    
+                    x_remaining_negative = np.arange(int(position_x), len(self.audio_data))[remaining_negative_mask]
+                    height_remaining_negative = remaining_data[remaining_negative_mask]
+                    self.waveformBarsNegative.setOpts(x=x_remaining_negative, height=height_remaining_negative)
+                    
             except Exception as e:
-                print(f"更新波形图位置线出错: {str(e)}")
+                print(f"更新波形图位置线和已播放波形出错: {str(e)}")
+                traceback.print_exc()
     
     def onDurationChanged(self, duration):
         """当音频时长变化时更新时间标签"""
