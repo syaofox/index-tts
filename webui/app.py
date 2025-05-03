@@ -65,7 +65,7 @@ def main():
     # 初始化增强的TTS服务
     enhanced_tts_service = EnhancedTTSService(tts_service)
     
-    # 初始化角色管理器，用于处理pickle文件
+    # 初始化角色管理器
     character_manager = CharacterManager(settings.prompts_dir)
     
     # 确保必要目录存在

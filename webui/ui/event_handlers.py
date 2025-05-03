@@ -45,11 +45,23 @@ class EventHandlers:
         if not prompt_path or not text:
             return gr.update(value=None, visible=True)
         
-        # 确保不是直接使用pickle文件作为音频输入
-        if isinstance(prompt_path, str) and prompt_path.endswith('.pickle'):
-            # 从pickle文件中提取正确的音频文件路径
+        # 如果prompt_path不是直接可用的音频文件，尝试查找对应角色的音频文件
+        if isinstance(prompt_path, str) and not os.path.exists(prompt_path):
             try:
-                prompt_path = self.file_service.get_prompt_path(os.path.basename(prompt_path).split('.')[0])
+                # 尝试提取角色名（如果是格式化的角色文件名）
+                basename = os.path.basename(prompt_path)
+                parts = basename.split("_", 1)
+                if len(parts) > 1:
+                    character_name = parts[0]
+                else:
+                    character_name = os.path.splitext(basename)[0]
+                
+                # 使用文件服务查找角色音频文件
+                prompt_path = self.file_service.get_prompt_path(character_name)
+                
+                if not os.path.exists(prompt_path) or prompt_path.endswith("_not_found"):
+                    print(f"无法找到角色 '{character_name}' 的音频文件")
+                    return gr.update(value=None, visible=True)
             except Exception as e:
                 print(f"处理提示文件路径时出错: {e}")
                 return gr.update(value=None, visible=True)
@@ -81,11 +93,11 @@ class EventHandlers:
             return gr.update(value=None)
         
         try:
-            # 使用CharacterManager加载pickle文件并提取音频
+            # 使用CharacterManager加载角色音频文件
             character_data = self.character_manager.load_character(prompt_name)
             
             if character_data and "voice_path" in character_data:
-                # 返回提取的音频文件路径
+                # 返回角色音频文件路径
                 return gr.update(value=character_data["voice_path"])
             else:
                 # 如果字符数据提取失败，尝试直接使用文件服务获取音频路径

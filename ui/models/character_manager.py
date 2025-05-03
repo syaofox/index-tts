@@ -4,8 +4,8 @@
 
 import os
 import time
-import pickle
 import glob
+import shutil
 
 
 class CharacterManager:
@@ -15,32 +15,22 @@ class CharacterManager:
         os.makedirs(prompt_dir, exist_ok=True)
     
     def save_character(self, name, voice_path):
-        """保存角色到pickle文件，包含音频数据"""
+        """保存角色（直接复制并重命名音频文件）"""
         if not name or not voice_path or not os.path.exists(voice_path):
             return False
         
         try:
-            # 读取音频文件的二进制内容
-            with open(voice_path, 'rb') as audio_file:
-                audio_data = audio_file.read()
-            
             # 获取原始文件名和扩展名
             orig_filename = os.path.basename(voice_path)
-            file_extension = os.path.splitext(voice_path)[1]
             
-            # 创建角色数据结构
-            character_data = {
-                "name": name,
-                "audio_data": audio_data,  # 直接保存音频二进制数据
-                "audio_extension": file_extension,  # 保存扩展名以便后续使用
-                "original_filename": orig_filename,  # 保存原始文件名
-                "created_time": time.time()
-            }
+            # 创建新的文件名格式：角色名_原文件名
+            new_filename = f"{name}_{orig_filename}"
             
-            # 保存到pickle文件
-            pickle_path = os.path.join(self.prompt_dir, f"{name}.pickle")
-            with open(pickle_path, "wb") as f:
-                pickle.dump(character_data, f)
+            # 目标路径
+            target_path = os.path.join(self.prompt_dir, new_filename)
+            
+            # 复制文件
+            shutil.copy2(voice_path, target_path)
             
             return True
         except Exception as e:
@@ -48,40 +38,25 @@ class CharacterManager:
             return False
     
     def load_character(self, name):
-        """从pickle文件加载角色数据，包括从二进制数据还原音频文件"""
+        """加载角色数据"""
         try:
-            pickle_path = os.path.join(self.prompt_dir, f"{name}.pickle")
-            if not os.path.exists(pickle_path):
+            # 查找匹配的角色文件（格式为：角色名_*.*)
+            pattern = os.path.join(self.prompt_dir, f"{name}_*")
+            matching_files = glob.glob(pattern)
+            
+            if not matching_files:
                 return None
             
-            with open(pickle_path, "rb") as f:
-                character_data = pickle.load(f)
+            # 获取第一个匹配的文件（如果有多个，使用第一个）
+            voice_path = matching_files[0]
             
-            # 从二进制数据创建临时音频文件
-            if "audio_data" in character_data and character_data["audio_data"]:
-                # 创建临时目录（如果不存在）
-                temp_dir = os.path.join(self.prompt_dir, "temp")
-                os.makedirs(temp_dir, exist_ok=True)
-                
-                # 使用原始文件名（如果存在），否则使用角色名加扩展名
-                if "original_filename" in character_data and character_data["original_filename"]:
-                    # 为防止文件名冲突，添加前缀
-                    filename = f"{name}_{character_data['original_filename']}"
-                else:
-                    extension = character_data.get("audio_extension", ".wav")
-                    filename = f"{name}{extension}"
-                
-                temp_audio_path = os.path.join(temp_dir, filename)
-                
-                # 写入音频数据到临时文件
-                with open(temp_audio_path, "wb") as audio_file:
-                    audio_file.write(character_data["audio_data"])
-                
-                # 将临时文件路径添加到返回数据中
-                character_data["voice_path"] = temp_audio_path
-            else:
-                print(f"警告: 角色 {name} 的音频数据不存在")
-                return None
+            # 创建角色数据结构
+            character_data = {
+                "name": name,
+                "voice_path": voice_path,
+                "original_filename": os.path.basename(voice_path),
+                "created_time": os.path.getctime(voice_path)
+            }
             
             return character_data
         except Exception as e:
@@ -89,36 +64,19 @@ class CharacterManager:
             return None
     
     def delete_character(self, name):
-        """删除角色pickle文件"""
+        """删除角色音频文件"""
         try:
-            pickle_path = os.path.join(self.prompt_dir, f"{name}.pickle")
-            if not os.path.exists(pickle_path):
+            # 查找匹配的角色文件
+            pattern = os.path.join(self.prompt_dir, f"{name}_*")
+            matching_files = glob.glob(pattern)
+            
+            if not matching_files:
                 return False
             
-            # 先获取角色数据，检查原始文件名
-            try:
-                with open(pickle_path, "rb") as f:
-                    character_data = pickle.load(f)
-                    
-                # 尝试删除临时文件
-                temp_dir = os.path.join(self.prompt_dir, "temp")
-                if os.path.exists(temp_dir):
-                    # 如果有原始文件名，尝试删除对应的临时文件
-                    if "original_filename" in character_data and character_data["original_filename"]:
-                        temp_path = os.path.join(temp_dir, f"{name}_{character_data['original_filename']}")
-                        if os.path.exists(temp_path):
-                            os.remove(temp_path)
-                    else:
-                        # 否则尝试删除各种可能的扩展名文件
-                        for ext in [".wav", ".mp3", ".flac", ".ogg"]:
-                            temp_path = os.path.join(temp_dir, f"{name}{ext}")
-                            if os.path.exists(temp_path):
-                                os.remove(temp_path)
-            except:
-                pass  # 即使获取角色数据失败，也继续删除pickle文件
+            # 删除所有匹配的文件
+            for file_path in matching_files:
+                os.remove(file_path)
             
-            # 删除pickle文件
-            os.remove(pickle_path)
             return True
         except Exception as e:
             print(f"删除角色出错: {str(e)}")
@@ -130,16 +88,22 @@ class CharacterManager:
             # 确保目录存在
             os.makedirs(self.prompt_dir, exist_ok=True)
             
-            # 获取所有pickle文件
-            character_files = glob.glob(os.path.join(self.prompt_dir, "*.pickle"))
-            characters = []
+            # 获取所有音频文件
+            audio_files = []
+            for ext in [".wav", ".mp3", ".flac", ".ogg"]:
+                audio_files.extend(glob.glob(os.path.join(self.prompt_dir, f"*{ext}")))
             
-            for file_path in character_files:
+            characters = set()
+
+            for file_path in audio_files:
                 basename = os.path.basename(file_path)
-                name, _ = os.path.splitext(basename)
-                characters.append(name)
+                # 从文件名中提取角色名（第一个下划线前的部分）
+                parts = basename.split("_", 1)
+                if len(parts) > 1:
+                    character_name = parts[0]
+                    characters.add(character_name)
             
-            return characters
+            return list(characters)
         except Exception as e:
             print(f"获取角色列表出错: {e}")
             return []
@@ -158,8 +122,10 @@ class CharacterManager:
             return False
             
         try:
-            file_path = os.path.join(self.prompt_dir, f"{character_name}.pickle")
-            return os.path.exists(file_path)
+            # 查找匹配的角色文件
+            pattern = os.path.join(self.prompt_dir, f"{character_name}_*")
+            matching_files = glob.glob(pattern)
+            return len(matching_files) > 0
         except Exception as e:
             print(f"检查角色是否存在时出错: {e}")
             return False
@@ -167,12 +133,15 @@ class CharacterManager:
     def export_character(self, name, export_path):
         """将角色导出为单独的文件"""
         try:
-            pickle_path = os.path.join(self.prompt_dir, f"{name}.pickle")
-            if not os.path.exists(pickle_path):
+            # 查找匹配的角色文件
+            pattern = os.path.join(self.prompt_dir, f"{name}_*")
+            matching_files = glob.glob(pattern)
+            
+            if not matching_files:
                 return False
             
-            import shutil
-            shutil.copy2(pickle_path, export_path)
+            # 导出第一个匹配的文件
+            shutil.copy2(matching_files[0], export_path)
             return True
         except Exception as e:
             print(f"导出角色出错: {str(e)}")
@@ -181,29 +150,36 @@ class CharacterManager:
     def import_character(self, import_path):
         """从外部文件导入角色"""
         try:
-            if not os.path.exists(import_path) or not import_path.endswith('.pickle'):
-                return False, "无效的角色文件"
+            if not os.path.exists(import_path):
+                return False, "文件不存在"
+                
+            # 检查文件是否为音频文件
+            file_ext = os.path.splitext(import_path)[1].lower()
+            valid_extensions = [".wav", ".mp3", ".flac", ".ogg"]
             
-            # 尝试加载文件验证格式
-            try:
-                with open(import_path, 'rb') as f:
-                    data = pickle.load(f)
-                if not isinstance(data, dict) or "name" not in data or "audio_data" not in data:
-                    return False, "文件格式错误，不是有效的角色文件"
-            except:
-                return False, "文件损坏或格式错误"
+            if file_ext not in valid_extensions:
+                return False, f"不支持的文件格式，请使用 {', '.join(valid_extensions)}"
+                
+            # 从文件名获取角色名
+            file_basename = os.path.basename(import_path)
             
-            # 提取角色名
-            character_name = data["name"]
+            # 如果文件名已经包含下划线，假设第一部分是角色名
+            if "_" in file_basename:
+                character_name = file_basename.split("_", 1)[0]
+            else:
+                # 如果没有下划线，使用文件名（不含扩展名）作为角色名
+                character_name = os.path.splitext(file_basename)[0]
             
             # 检查是否已存在同名角色
-            if os.path.exists(os.path.join(self.prompt_dir, f"{character_name}.pickle")):
+            if self.character_exists(character_name):
                 return False, f"已存在同名角色 '{character_name}'"
             
-            # 复制文件到prompts目录
-            import shutil
-            dest_path = os.path.join(self.prompt_dir, f"{character_name}.pickle")
-            shutil.copy2(import_path, dest_path)
+            # 创建目标文件名
+            target_filename = f"{character_name}_{file_basename}"
+            target_path = os.path.join(self.prompt_dir, target_filename)
+            
+            # 复制文件
+            shutil.copy2(import_path, target_path)
             
             return True, character_name
         except Exception as e:

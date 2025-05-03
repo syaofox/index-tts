@@ -928,12 +928,10 @@ class MainWindow(QMainWindow):
     
     def cleanupOnExit(self):
         """程序退出前清理临时文件"""
+        # 新方式不再需要清理临时文件，因为我们直接使用原始音频文件
+        # 这个方法保留以便兼容现有调用
         try:
-            temp_dir = os.path.join(self.character_manager.prompt_dir, "temp")
-            if os.path.exists(temp_dir):
-                import shutil
-                shutil.rmtree(temp_dir, ignore_errors=True)
-                print("临时文件清理完成")
+            print("临时文件清理完成（新版本不再需要）")
         except Exception as e:
             print(f"清理临时文件出错: {str(e)}")
     
@@ -980,8 +978,17 @@ class MainWindow(QMainWindow):
         name = self.char_combo.itemData(index)
         
         # 选择保存路径
+        character_data = self.character_manager.load_character(name)
+        if not character_data or "voice_path" not in character_data:
+            QMessageBox.warning(self, "错误", f"无法加载角色 '{name}' 数据")
+            return
+            
+        # 获取原始音频文件的扩展名
+        ext = os.path.splitext(character_data["voice_path"])[1]
+        
+        # 选择保存路径
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "导出角色", f"{name}.pickle", "角色文件 (*.pickle)"
+            self, "导出角色", f"{name}{ext}", f"音频文件 (*{ext})"
         )
         
         if file_path:
@@ -993,7 +1000,7 @@ class MainWindow(QMainWindow):
     def importCharacter(self):
         """从外部文件导入角色"""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "导入角色", "", "角色文件 (*.pickle)"
+            self, "导入角色", "", "音频文件 (*.wav *.mp3 *.flac *.ogg)"
         )
         
         if file_path:

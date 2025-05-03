@@ -30,44 +30,61 @@ class FileService:
         os.makedirs(self.outputs_dir, exist_ok=True)
         os.makedirs(os.path.join(self.outputs_dir, "tasks"), exist_ok=True)
     
-    def get_prompt_files(self, ext: Optional[str] = ".pickle") -> List[str]:
+    def get_prompt_files(self, exts: Optional[List[str]] = None) -> List[str]:
         """获取提示模板文件列表
         
         Args:
-            ext: 文件扩展名，默认为.pickle
+            exts: 文件扩展名列表，默认为常见音频格式
         
         Returns:
             提示模板文件名列表（不含路径）
         """
-        pattern = os.path.join(self.prompts_dir, f"*{ext}")
-        files = glob.glob(pattern)
+        if exts is None:
+            exts = [".wav", ".mp3", ".flac", ".ogg"]
+            
+        files = []
+        for ext in exts:
+            pattern = os.path.join(self.prompts_dir, f"*{ext}")
+            files.extend(glob.glob(pattern))
         return [os.path.basename(f) for f in files]
     
     def get_prompt_names(self) -> List[str]:
-        """获取提示模板名称列表（不含扩展名）
+        """获取提示模板名称列表（角色名，从文件名提取）
         
         Returns:
             提示模板名称列表
         """
         files = self.get_prompt_files()
-        return [os.path.splitext(f)[0] for f in files]
+        characters = set()
+        
+        for filename in files:
+            # 从文件名中提取角色名（第一个下划线前的部分）
+            parts = filename.split("_", 1)
+            if len(parts) > 1:
+                character_name = parts[0]
+                characters.add(character_name)
+        
+        return list(characters)
     
     def get_prompt_path(self, prompt_name: str) -> str:
         """获取提示模板的完整路径
         
         Args:
-            prompt_name: 提示模板名称，可以包含或不包含扩展名
+            prompt_name: 角色名称
         
         Returns:
-            提示模板的完整路径
+            角色音频文件的完整路径
         """
-        # 检查是否已包含扩展名
-        if prompt_name.endswith('.pickle'):
-            filename = prompt_name
-        else:
-            filename = f"{prompt_name}.pickle"
+        # 查找匹配的文件模式
+        pattern = os.path.join(self.prompts_dir, f"{prompt_name}_*")
+        matching_files = glob.glob(pattern)
         
-        return os.path.join(self.prompts_dir, filename)
+        if matching_files:
+            # 返回第一个匹配的文件
+            return matching_files[0]
+        else:
+            # 如果没有找到匹配的文件，返回一个可能的路径（供错误处理）
+            return os.path.join(self.prompts_dir, f"{prompt_name}_not_found")
     
     def save_file(self, source_path: str, target_dir: Optional[str] = None) -> str:
         """保存文件到指定目录
