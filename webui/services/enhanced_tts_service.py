@@ -258,10 +258,6 @@ class EnhancedTTSService:
             return output_path
             
         try:
-            # 加载所有音频文件
-            waveforms = []
-            sr = None
-            
             # 先验证所有音频文件的有效性
             valid_audio_files = []
             for file_path in audio_files:
@@ -273,37 +269,62 @@ class EnhancedTTSService:
             if not valid_audio_files:
                 print("错误: 没有有效的音频文件可以合并")
                 return None
-                
-            # 确保segments至少包含有效数量的非BR段落
-            valid_segments = [s for s in segments if s != TextProcessor.BR_TAG and s.strip()]
-            if len(valid_segments) < len(valid_audio_files):
-                print(f"警告: 有效段落数({len(valid_segments)})少于音频文件数({len(valid_audio_files)})")
-                # 调整segments以匹配音频文件
-                segments = valid_segments
             
             print(f"开始合并 {len(valid_audio_files)} 个音频文件")
             
-            file_index = 0
+            # 创建一个映射关系，将非BR_TAG的segments位置映射到audio_files的索引
+            segment_to_audio_map = {}
+            audio_idx = 0
+            
+            for i, segment in enumerate(segments):
+                if segment != TextProcessor.BR_TAG and segment.strip():
+                    if audio_idx < len(valid_audio_files):
+                        segment_to_audio_map[i] = audio_idx
+                        audio_idx += 1
+            
+            if not segment_to_audio_map:
+                print("错误: 无法建立段落和音频文件的映射关系")
+                return None
+            
+            # 加载音频波形
+            waveforms = []
+            sr = None
+            
+            # 根据segments顺序处理，确保停顿在正确位置
+            last_processed_segment_idx = -1
+            
             for i, segment in enumerate(segments):
                 if segment == TextProcessor.BR_TAG:
-                    # 在空行位置添加静音
+                    # 在空行位置添加较长的静音
                     if sr is not None:
-                        print(f"在位置 {i} 添加 {pause_time} 秒静音")
-                        silence_len = int(sr * pause_time)
+                        # 空行使用更长的停顿时间
+                        br_pause_time = pause_time  # 空行停顿时间是普通停顿的2倍
+                        print(f"在空行位置 {i} 添加 {br_pause_time} 秒静音")
+                        silence_len = int(sr * br_pause_time)
                         silence = torch.zeros(1, silence_len)
                         waveforms.append(silence)
-                elif segment.strip():
-                    # 添加当前片段的音频
-                    if file_index < len(valid_audio_files):
-                        try:
-                            current_file = valid_audio_files[file_index]
-                            print(f"加载音频文件: {current_file}")
-                            waveform, sample_rate = torchaudio.load(current_file)
-                            waveforms.append(waveform)
-                            sr = sample_rate
-                            file_index += 1
-                        except Exception as e:
-                            print(f"加载音频文件时出错: {e}")
+                elif segment.strip() and i in segment_to_audio_map:
+                    # 处理有效文本段落
+                    audio_index = segment_to_audio_map[i]
+                    current_file = valid_audio_files[audio_index]
+                    
+                    try:
+                        print(f"加载音频文件: {current_file} (段落 {i+1})")
+                        waveform, sample_rate = torchaudio.load(current_file)
+                        waveforms.append(waveform)
+                        sr = sample_rate
+                        
+                        # 在每个有效段落后添加普通停顿（除非下一个段落是BR_TAG）
+                        if i + 1 < len(segments):                            
+                            print(f"在段落 {i+1} 后添加 {pause_time} 秒停顿")
+                            silence_len = int(sr * pause_time)
+                            silence = torch.zeros(1, silence_len)
+                            waveforms.append(silence)
+                            
+                    except Exception as e:
+                        print(f"加载音频文件时出错: {e}")
+                    
+                    last_processed_segment_idx = i
             
             # 检查waveforms是否为空
             if not waveforms:
