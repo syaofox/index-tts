@@ -243,13 +243,14 @@ class AudioPlayer(QWidget):
             # 转换为numpy数组以便处理
             audio_data = waveform.numpy()[0]  # 取第一个通道
             print(f"音频加载完成, 长度: {len(audio_data)}, 采样率: {sample_rate}")
+
+            # 使用固定采样间隔进行降采样，每400个点取1个点
+            sample_interval = 400
+            audio_data = audio_data[::sample_interval]
+            print(f"降采样后长度: {len(audio_data)}, 采样间隔: {sample_interval}")
             
-            # 处理过长的音频，降采样以提高UI性能
-            if len(audio_data) > 500:
-                # 限制最大点数为500，大幅提高渲染性能
-                step = max(1, len(audio_data) // 500)
-                audio_data = audio_data[::step]
-                print(f"降采样后长度: {len(audio_data)}")
+            
+            
             
             # 标准化音频数据到-1到1之间
             max_val = np.max(np.abs(audio_data))
