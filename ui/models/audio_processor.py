@@ -182,17 +182,16 @@ class AudioProcessor:
             # 为每个段落添加对应的音频
             for i, (segment_index, wave) in enumerate(sorted_outputs):
                 # 先检查是否需要在两个段落之间添加静音
+                # 如果下一个段落是<br>，则不添加静音
                 if i > 0:  # 不是第一个音频片段
                     # 添加段落间静音
-                    short_silence = AudioProcessor.create_silence(pause_time / 2, sample_rate, num_channels)
-                    output_waveforms.append(short_silence)
+                    output_waveforms.append(AudioProcessor.create_silence(pause_time, sample_rate, num_channels))
                 
                 # 处理<br>标记的长静音（处理当前段落之前的所有<br>）
                 for silence_pos in silence_positions:
                     if last_index < silence_pos < segment_index:
                         # 为每个<br>添加一个完整静音
-                        silence = AudioProcessor.create_silence(pause_time, sample_rate, num_channels)
-                        output_waveforms.append(silence)
+                        output_waveforms.append(AudioProcessor.create_silence(pause_time, sample_rate, num_channels))
                 
                 # 添加当前段落的音频（规范化后）
                 norm_wave, _ = AudioProcessor.normalize_audio_data(wave, sample_rate)
@@ -202,11 +201,11 @@ class AudioProcessor:
                 # 更新最后处理的索引
                 last_index = segment_index
             
-            # 处理末尾的<br>标记
-            for silence_pos in silence_positions:
-                if silence_pos > last_index:
-                    silence = AudioProcessor.create_silence(pause_time, sample_rate, num_channels)
-                    output_waveforms.append(silence)
+            # # 处理末尾的<br>标记
+            # for silence_pos in silence_positions:
+            #     if silence_pos > last_index:
+            #         silence = AudioProcessor.create_silence(pause_time, sample_rate, num_channels)
+            #         output_waveforms.append(silence)
             
             # 检查是否有波形需要合并
             if not output_waveforms:
