@@ -101,6 +101,12 @@ class SingleRoleInference(InferenceBase):
             for i, segment in enumerate(segments):
                 # 检查是否请求停止
                 if self.is_stop_requested():
+                    # 尝试保存部分结果
+                    if temp_outputs:
+                        self.progress.emit("用户中断推理，尝试保存已生成部分...")
+                        partial_output_path = self.save_partial_output(temp_outputs, silence_positions, segments)
+                        if partial_output_path:
+                            return True, partial_output_path
                     self.error.emit("推理已被用户中断")
                     return False, None
                 
@@ -137,6 +143,12 @@ class SingleRoleInference(InferenceBase):
             
             # 检查是否请求停止
             if self.is_stop_requested():
+                # 尝试保存部分结果
+                if temp_outputs:
+                    self.progress.emit("用户中断推理，尝试保存已生成部分...")
+                    partial_output_path = self.save_partial_output(temp_outputs, silence_positions, segments)
+                    if partial_output_path:
+                        return True, partial_output_path
                 self.error.emit("推理已被用户中断")
                 return False, None
             
@@ -193,6 +205,10 @@ class SingleRoleInference(InferenceBase):
             
             # 使用内存模式进行推理
             result = self.strategy.infer(self.tts, self.voice_path, text, None)
+            
+            # 检查是否请求停止 - 由于单文本处理是原子性的，如果完成了推理就不应该丢弃结果
+            if self.is_stop_requested():
+                self.progress.emit("推理已完成，正在保存结果...")
             
             if isinstance(result, tuple) and len(result) == 2:
                 # 成功获取内存数据

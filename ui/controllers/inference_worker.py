@@ -70,7 +70,23 @@ class InferenceWorker(QObject):
                     self.error.emit("推理结果格式不正确")
             else:
                 if self.is_stop_requested():
-                    self.error.emit("推理已被用户中断")
+                    # 检查是否有部分结果文件名（_部分 或 _最后片段）
+                    partial_file = None
+                    if self.output_path:
+                        # 检查是否存在部分文件
+                        partial_path = os.path.splitext(self.output_path)[0] + "_部分.wav"
+                        last_segment_path = os.path.splitext(self.output_path)[0] + "_最后片段.wav"
+                        
+                        if os.path.exists(partial_path):
+                            partial_file = partial_path
+                        elif os.path.exists(last_segment_path):
+                            partial_file = last_segment_path
+                    
+                    if partial_file:
+                        self.progress.emit("推理已中断，但已保存部分生成内容")
+                        self.finished.emit(partial_file)
+                    else:
+                        self.error.emit("推理已被用户中断")
                 else:
                     self.error.emit("语音生成失败")
                 

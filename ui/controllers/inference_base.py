@@ -79,7 +79,7 @@ class InferenceBase(QObject):
         尝试保存部分处理结果
         
         Args:
-            temp_outputs: 临时输出文件列表，格式为[(index, file_path), ...] 或 [(index, waveform), ...]
+            temp_outputs: 临时输出列表，格式为[(index, wave_data), ...]
             silence_positions: 静音位置列表
             segments: 文本段落列表
             
@@ -100,50 +100,46 @@ class InferenceBase(QObject):
             # 合并已生成的片段
             self.progress.emit(f"正在合并 {len(temp_outputs)} 个已生成的片段...")
             
-            if self.in_memory_mode:
-                # 内存模式
-                merged_wave, sample_rate = AudioProcessor.merge_audio_with_silence(
-                    temp_outputs, silence_positions, self.pause_time, 24000
-                )
-                if merged_wave is not None and sample_rate is not None:
-                    AudioProcessor.save_audio_to_file(merged_wave, sample_rate, partial_output_path)
+            # 内存模式 - 合并波形数据
+            merged_wave, sample_rate = AudioProcessor.merge_audio_with_silence(
+                temp_outputs, silence_positions, self.pause_time, 24000
+            )
+            
+            if merged_wave is not None and sample_rate is not None:
+                # 保存合并后的音频
+                output_file = AudioProcessor.save_audio_to_file(merged_wave, sample_rate, partial_output_path)
+                
+                if output_file and os.path.exists(output_file):
+                    self.progress.emit(f"已成功保存部分结果到: {os.path.basename(partial_output_path)}")
+                    return partial_output_path
             else:
-                # 这种情况不应该发生，但保留兼容性
-                self.error.emit("不支持的合并模式")
-                return None
+                self.progress.emit("合并音频失败，尝试保存最后一个片段...")
             
-            self.progress.emit(f"已成功保存部分结果到: {os.path.basename(partial_output_path)}")
-            return partial_output_path
-            
-        except Exception as e:
-            print(f"合并部分结果出错: {str(e)}")
-            
-            # 如果合并失败，尝试保存最后一个生成的片段
+            # 如果合并失败，尝试保存最后一个片段
             if temp_outputs:
                 try:
-                    # 获取基础文件名（如果有）
-                    if not self.output_path:
-                        self.output_path = FileManager.generate_output_path("output")
-                        
+                    # 获取最后一个片段
                     last_output_path = FileManager.get_partial_output_path(self.output_path, "_最后片段")
                     
                     self.progress.emit("合并失败，尝试保存最后生成的片段...")
                     
-                    if self.in_memory_mode:
-                        # 内存模式
-                        _, last_wave = temp_outputs[-1]
-                        AudioProcessor.save_audio_to_file(last_wave, 24000, last_output_path)
-                    else:
-                        # 这种情况不应该发生，但保留兼容性
-                        self.error.emit("不支持的保存模式")
-                        return None
+                    # 获取最后一个片段
+                    _, last_wave = temp_outputs[-1]
                     
-                    self.progress.emit(f"已保存部分结果: {os.path.basename(last_output_path)}")
-                    return last_output_path
+                    # 保存最后一个片段
+                    last_file = AudioProcessor.save_audio_to_file(last_wave, 24000, last_output_path)
                     
+                    if last_file and os.path.exists(last_file):
+                        self.progress.emit(f"已保存部分结果: {os.path.basename(last_output_path)}")
+                        return last_output_path
+                        
                 except Exception as e2:
                     print(f"保存最后一个片段出错: {str(e2)}")
         
+        except Exception as e:
+            print(f"合并部分结果出错: {str(e)}")
+            traceback.print_exc()
+            
         return None
     
     # 模板方法，定义了整体推理流程，子类需要实现具体推理方法
