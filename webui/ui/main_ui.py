@@ -52,7 +52,7 @@ class MainUI:
                 # 布局组件
                 prompt_audio, prompt_dropdown, _, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio = self._create_main_tab()
                 
-                self._add_multi_role_instructions()
+             
                 
                 # 绑定事件 - 使用每一个yield更新UI
                 gen_button.click(
@@ -182,24 +182,3 @@ class MainUI:
         
         # 返回组件，包括新添加的历史音频组件，移除了不再需要的play_history_btn
         return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio
-    
-    def _add_multi_role_instructions(self):
-        """添加多角色使用说明"""
-        gr.HTML('''
-        <div style="margin: 10px 0; padding: 10px; border: 1px solid #ddd; border-radius: 5px; background-color: #f9f9f9;">
-            <h3>多角色使用说明：</h3>
-            <p>可以使用&lt;角色名&gt;的格式来指定不同角色的对话。例如：</p>
-            <pre>
-&lt;角色1&gt;
-这是角色1说的话。
-&lt;角色2&gt;
-这是角色2的回应。
-            </pre>
-            <p>注意：</p>
-            <ul>
-                <li>角色名必须与预先保存的角色名称完全匹配</li>
-                <li>每个角色的文本可以包含多行</li>
-                <li>空行会自动添加停顿</li>
-            </ul>
-        </div>
-        ''') 

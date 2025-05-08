@@ -31,7 +31,20 @@ class TextInput:
             Gradio文本区域组件
         """
         if placeholder is None:
-            placeholder = "请输入需要转换为语音的文本..."
+            placeholder = """请输入需要转换为语音的文本...
+多角色使用说明：
+可以使用<角色名>的格式来指定不同角色的对话。例如：
+
+<角色1>
+这是角色1说的话。
+<角色2>
+这是角色2的回应。
+            
+注意：
+
+角色名必须与预先保存的角色名称完全匹配
+每个角色的文本可以包含多行
+空行会自动添加停顿"""
         
         return gr.TextArea(
             label=label,
