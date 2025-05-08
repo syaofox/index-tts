@@ -91,8 +91,8 @@ class MainUI:
                     
                 with gr.Row():
                     # 添加文本处理选项
-                    punct_chars = gr.Textbox(label="分割标点符号", value="。？！.!?;；：:", lines=1)
-                    pause_time = gr.Number(label="停顿时间(秒)", value=0.2, step=0.1)
+                    punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
+                    pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
                 
                 gen_button = gr.Button("生成语音")
         

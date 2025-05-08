@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 class Settings:
     """WebUI设置类"""
     # 服务器配置
-    server_host: str = "127.0.0.1"
+    server_host: str = "0.0.0.0"
     server_port: int = 7777
     
     # 目录配置

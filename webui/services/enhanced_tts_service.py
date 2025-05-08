@@ -12,7 +12,7 @@ import time
 
 # 导入相关模块
 from ui.models.character_manager import CharacterManager
-from ui.utils.text_processor import TextProcessor
+from ui.models.text_processor import TextProcessor
 
 
 class EnhancedTTSService:
