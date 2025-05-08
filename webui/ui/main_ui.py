@@ -26,13 +26,16 @@ class MainUI:
         self.text_input = text_input
         self.log_display = log_display
         
-    def build(self, generate_callback, update_prompt_callback):
+    def build(self, generate_callback, update_prompt_callback, save_preset_callback=None, refresh_presets_callback=None, delete_preset_callback=None):
         """
         构建Gradio界面
         
         Args:
             generate_callback: 生成音频的回调函数
             update_prompt_callback: 更新提示的回调函数
+            save_preset_callback: 保存预设的回调函数
+            refresh_presets_callback: 刷新预设的回调函数
+            delete_preset_callback: 删除预设的回调函数
             
         Returns:
             gr.Blocks: Gradio界面对象
@@ -45,7 +48,7 @@ class MainUI:
             
             with gr.Tab("音频生成"):
                 # 布局组件
-                prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area = self._create_main_tab()
+                prompt_audio, prompt_dropdown, preset_name, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area = self._create_main_tab()
                 
                 self._add_multi_role_instructions()
                 
@@ -62,6 +65,35 @@ class MainUI:
                     inputs=[prompt_dropdown],
                     outputs=[prompt_audio]
                 )
+                
+                # 当选择下拉框变化时清空预设名称输入框
+                prompt_dropdown.change(
+                    lambda _: gr.update(value=""),
+                    inputs=[],
+                    outputs=[preset_name]
+                )
+                
+                # 绑定预设管理按钮事件
+                if save_preset_callback:
+                    save_btn.click(
+                        fn=save_preset_callback,
+                        inputs=[prompt_audio, prompt_dropdown, preset_name],
+                        outputs=[prompt_dropdown, log_area]
+                    )
+                
+                if refresh_presets_callback:
+                    refresh_btn.click(
+                        fn=refresh_presets_callback,
+                        inputs=[],
+                        outputs=[prompt_dropdown, log_area]
+                    )
+                
+                if delete_preset_callback:
+                    delete_btn.click(
+                        fn=delete_preset_callback,
+                        inputs=[prompt_dropdown],
+                        outputs=[prompt_dropdown, log_area]
+                    )
         
         return demo
     
@@ -81,6 +113,15 @@ class MainUI:
             with gr.Column():
                 prompt_audio = self.audio_player.create_upload_component(label="请上传参考音频")
                 prompt_dropdown = self.prompt_selector.create_dropdown_component(label="或选择预设提示")
+                
+                # 添加预设名称输入框和三个按钮
+                with gr.Row():
+                    preset_name = gr.Textbox(label="预设名称", placeholder="输入新预设名称", interactive=True)
+                    save_btn = gr.Button("📥 保存为预设", size="sm")
+                
+                with gr.Row():
+                    refresh_btn = gr.Button("🔄 刷新预设", size="sm")
+                    delete_btn = gr.Button("🗑️ 删除预设", size="sm", variant="secondary")
             
             with gr.Column():
                 text_area = self.text_input.create_text_area(label="请输入目标文本")
@@ -104,7 +145,7 @@ class MainUI:
         # 添加日志显示区域
         log_area = self.log_display.create_log_area(label="处理日志")
         
-        return prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area
+        return prompt_audio, prompt_dropdown, preset_name, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area
     
     def _add_multi_role_instructions(self):
         """添加多角色使用说明"""

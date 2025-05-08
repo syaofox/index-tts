@@ -97,7 +97,10 @@ def main():
     # 构建Gradio界面
     demo = main_ui.build(
         generate_callback=event_handlers.generate_audio,
-        update_prompt_callback=event_handlers.update_prompt_from_dropdown
+        update_prompt_callback=event_handlers.update_prompt_from_dropdown,
+        save_preset_callback=event_handlers.save_preset,
+        refresh_presets_callback=event_handlers.refresh_presets,
+        delete_preset_callback=event_handlers.delete_preset
     )
     
     # 启动Gradio服务

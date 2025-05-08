@@ -26,9 +26,10 @@ class PromptSelector:
         Returns:
             提示模板名称列表
         """
-
-        # 排序
-        return sorted(self.file_service.get_prompt_names())
+        # 获取现有预设并排序
+        prompt_names = sorted(self.file_service.get_prompt_names())
+        # 在开头添加"无"选项
+        return ["无"] + prompt_names
     
     def create_dropdown_component(self, 
                                  label: str = "选择提示模板") -> gr.Dropdown:
@@ -46,7 +47,7 @@ class PromptSelector:
             choices=choices,
             label=label,
             interactive=True,
-            value=choices[0] if choices else None
+            value="无"  # 默认选择"无"
         )
     
     def create_gallery_component(self, 
