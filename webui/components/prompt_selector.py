@@ -47,7 +47,8 @@ class PromptSelector:
             choices=choices,
             label=label,
             interactive=True,
-            value="无"  # 默认选择"无"
+            value="无",  # 默认选择"无"
+            allow_custom_value=True  # 允许用户输入自定义值
         )
     
     def create_gallery_component(self, 

@@ -23,6 +23,7 @@ class FileService:
         """
         self.prompts_dir = prompts_dir
         self.outputs_dir = outputs_dir
+        self._prompt_names_cache = None  # 添加内部缓存
     
     def ensure_directories(self):
         """确保必要的目录存在"""
@@ -48,8 +49,27 @@ class FileService:
             files.extend(glob.glob(pattern))
         return [os.path.basename(f) for f in files]
     
-    def get_prompt_names(self) -> List[str]:
-        """获取提示模板名称列表（角色名，从文件名提取）
+    def refresh_cache(self):
+        """刷新预设名称缓存"""
+        self._prompt_names_cache = None
+    
+    def update_prompt_names(self, new_names: List[str]):
+        """更新预设名称列表缓存
+        
+        Args:
+            new_names: 新的预设名称列表
+        """
+        if self._prompt_names_cache is None:
+            # 如果缓存为空，初始化它
+            self._prompt_names_cache = self.get_prompt_names_internal()
+        
+        # 添加新名称到缓存中
+        for name in new_names:
+            if name not in self._prompt_names_cache:
+                self._prompt_names_cache.append(name)
+    
+    def get_prompt_names_internal(self) -> List[str]:
+        """获取提示模板名称列表（内部实现）
         
         Returns:
             提示模板名称列表
@@ -65,6 +85,20 @@ class FileService:
                 characters.add(character_name)
         
         return list(characters)
+    
+    def get_prompt_names(self) -> List[str]:
+        """获取提示模板名称列表（角色名，从文件名提取）
+        
+        Returns:
+            提示模板名称列表
+        """
+        # 如果有缓存，直接返回
+        if self._prompt_names_cache is not None:
+            return self._prompt_names_cache
+        
+        # 否则从文件系统中获取并缓存结果
+        self._prompt_names_cache = self.get_prompt_names_internal()
+        return self._prompt_names_cache
     
     def get_prompt_path(self, prompt_name: str) -> str:
         """获取提示模板的完整路径

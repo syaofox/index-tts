@@ -220,7 +220,8 @@ class EventHandlers:
             
             # 检查选择的预设是否在有效列表中
             if prompt_name not in valid_presets:
-                print(f"警告: 预设 '{prompt_name}' 不在当前有效预设列表中")
+                # 对于自定义输入的值，不显示警告，直接返回空值
+                # 当用户点击保存按钮后，会创建新预设
                 return gr.update(value=None)
             
             # 使用CharacterManager加载角色音频文件
@@ -237,38 +238,40 @@ class EventHandlers:
             print(f"加载提示音频出错: {e}")
             return gr.update(value=None)
     
-    def save_preset(self, prompt_audio, current_preset_name, preset_name_input):
+    def save_preset(self, prompt_audio, current_preset_name):
         """
         保存当前参考音频为预设
         
         Args:
             prompt_audio: 参考音频文件路径
             current_preset_name: 当前选中的预设名称
-            preset_name_input: 用户输入的预设名称
             
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新)
+            tuple: (更新后的预设下拉列表, 日志更新, 音频路径更新)
         """
         # 清空之前的日志
         self.logs = ""
         
         if not prompt_audio:
             self.logs = "错误: 没有有效的参考音频可保存"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
         
         try:
+            # 获取当前有效的预设列表
+            valid_presets = self.file_service.get_prompt_names()
+            
             # 决定使用哪个预设名
             if current_preset_name == "无":
-                # 如果选择了"无"，表示要新增预设
-                if preset_name_input and preset_name_input.strip():
-                    # 用户输入了预设名，使用用户的输入
-                    # 替换下划线为连字符，避免影响角色名提取
-                    save_name = preset_name_input.strip().replace("_", "-")
-                else:
-                    # 用户没有输入预设名，使用默认名称
-                    default_name = time.strftime("preset-%Y%m%d-%H%M%S")
-                    save_name = default_name
-                
+                # 如果选择了"无"，使用默认前缀
+                prefix = "preset"
+                # 生成唯一的预设名，使用时间戳
+                timestamp = time.strftime("%Y%m%d-%H%M%S")
+                save_name = f"{prefix}-{timestamp}"
+                self.logs = f"正在创建新预设 '{save_name}'..."
+            elif current_preset_name not in valid_presets:
+                # 如果输入了自定义名称（不在预设列表中），直接使用它
+                # 替换下划线为连字符，避免影响角色名提取
+                save_name = current_preset_name.replace("_", "-")
                 self.logs = f"正在创建新预设 '{save_name}'..."
             else:
                 # 如果选择了现有预设，表示要更新预设
@@ -301,14 +304,18 @@ class EventHandlers:
             shutil.copy2(prompt_audio, dest_path)
             
             # 更新日志
-            if current_preset_name == "无":
+            if current_preset_name == "无" or current_preset_name not in valid_presets:
                 self.logs = f"成功创建新预设 '{save_name}'"
             else:
                 self.logs = f"成功更新预设 '{save_name}'"
             
             # 刷新预设列表，确保包含新保存的预设
             # 由于文件操作可能需要时间生效，添加一个小延迟
-            time.sleep(0.2)
+            time.sleep(0.3)  # 增加延迟以确保文件系统刷新
+            
+            # 刷新文件服务的缓存（如果有这个方法）
+            if hasattr(self.file_service, 'refresh_cache'):
+                self.file_service.refresh_cache()
             
             # 再次获取最新的预设列表
             prompt_names = sorted(self.file_service.get_prompt_names())
@@ -318,26 +325,26 @@ class EventHandlers:
                 # 如果新预设不在列表中，可能是文件系统延迟，直接添加到列表中
                 prompt_names.append(save_name)
                 prompt_names.sort()
+                # 更新文件服务的内部列表，确保下一次调用也能找到这个预设
+                if hasattr(self.file_service, 'update_prompt_names'):
+                    self.file_service.update_prompt_names([save_name])
             
             # 返回更新后的预设列表，并选择刚保存的预设
             updated_choices = ["无"] + prompt_names
             
-            # 如果发现新预设名称不在更新后的选项中，则默认选择"无"
-            if save_name not in updated_choices:
-                return gr.update(choices=updated_choices, value="无"), f"{self.logs}\n警告: 预设添加后未能立即显示，请点击刷新按钮"
-            
-            return gr.update(choices=updated_choices, value=save_name), self.logs
+            # 返回三个更新值: 下拉框更新、日志更新、音频控件更新(保持原始音频不变)
+            return gr.update(choices=updated_choices, value=save_name), self.logs, gr.update(value=prompt_audio)
             
         except Exception as e:
             self.logs = f"保存预设时出错: {str(e)}"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
     
     def refresh_presets(self):
         """
         刷新预设列表
         
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新)
+            tuple: (更新后的预设下拉列表, 日志更新, 音频更新)
         """
         # 清空之前的日志
         self.logs = ""
@@ -346,15 +353,19 @@ class EventHandlers:
             # 添加一个小延迟，确保文件系统操作完成
             time.sleep(0.2)
             
+            # 刷新文件服务的缓存（如果有这个方法）
+            if hasattr(self.file_service, 'refresh_cache'):
+                self.file_service.refresh_cache()
+            
             # 刷新预设列表
             prompt_names = sorted(self.file_service.get_prompt_names())
             updated_choices = ["无"] + prompt_names
             self.logs = f"已刷新预设列表，共 {len(prompt_names)} 个预设"
-            return gr.update(choices=updated_choices, value="无"), self.logs
+            return gr.update(choices=updated_choices, value="无"), self.logs, gr.update(value=None)
             
         except Exception as e:
             self.logs = f"刷新预设列表时出错: {str(e)}"
-            return gr.update(choices=["无"]), self.logs
+            return gr.update(choices=["无"]), self.logs, gr.update(value=None)
     
     def delete_preset(self, preset_name):
         """
@@ -364,14 +375,14 @@ class EventHandlers:
             preset_name: 要删除的预设名称
             
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新)
+            tuple: (更新后的预设下拉列表, 日志更新, 音频更新)
         """
         # 清空之前的日志
         self.logs = ""
         
         if not preset_name or preset_name == "无":
             self.logs = "错误: 未选择任何有效预设"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
         
         try:
             # 获取预设文件路径
@@ -387,11 +398,15 @@ class EventHandlers:
             # 添加一个小延迟，确保文件系统操作完成
             time.sleep(0.2)
             
+            # 刷新文件服务的缓存（如果有这个方法）
+            if hasattr(self.file_service, 'refresh_cache'):
+                self.file_service.refresh_cache()
+            
             # 返回更新后的预设列表
             updated_prompt_names = sorted(self.file_service.get_prompt_names())
             updated_choices = ["无"] + updated_prompt_names
-            return gr.update(choices=updated_choices, value="无"), self.logs
+            return gr.update(choices=updated_choices, value="无"), self.logs, gr.update(value=None)
             
         except Exception as e:
             self.logs = f"删除预设时出错: {str(e)}"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs 
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None) 
