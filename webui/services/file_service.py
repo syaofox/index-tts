@@ -56,7 +56,7 @@ class FileService:
         """
         files = self.get_prompt_files()
         characters = set()
-        
+       
         for filename in files:
             # 从文件名中提取角色名（第一个下划线前的部分）
             parts = filename.split("_", 1)

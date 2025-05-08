@@ -26,7 +26,9 @@ class PromptSelector:
         Returns:
             提示模板名称列表
         """
-        return self.file_service.get_prompt_names()
+
+        # 排序
+        return sorted(self.file_service.get_prompt_names())
     
     def create_dropdown_component(self, 
                                  label: str = "选择提示模板") -> gr.Dropdown:
