@@ -32,6 +32,30 @@ class EnhancedTTSService:
         # 从配置文件加载文本替换规则
         self.replace_rules = self.load_replace_rules("webui/text_replace_config.txt")
         
+        # 日志回调函数，默认为打印到控制台
+        self.log_callback = print
+        
+    def set_log_callback(self, callback_func):
+        """
+        设置日志回调函数
+        
+        Args:
+            callback_func: 回调函数，接收日志消息字符串
+        """
+        self.log_callback = callback_func
+        
+    def log(self, message):
+        """
+        记录日志消息
+        
+        Args:
+            message: 日志消息
+        """
+        # 打印到终端并通过回调发送到UI
+        print(message)
+        if self.log_callback and self.log_callback != print:
+            self.log_callback(message)
+        
     def load_replace_rules(self, config_path):
         """从配置文件加载文本替换规则"""
         replace_rules = []
@@ -49,7 +73,7 @@ class EnhancedTTSService:
                             replace_rules.append((parts[0], parts[1], parts[2]))
             return replace_rules
         except Exception as e:
-            print(f"加载替换规则出错: {e}")
+            self.log(f"加载替换规则出错: {e}")
             return []
     
     def generate(self, prompt_path, text, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
@@ -72,12 +96,12 @@ class EnhancedTTSService:
             role_text_pairs = TextProcessor.parse_multi_role_text(text)
             
             if len(role_text_pairs) > 1:
-                print(f"检测到多角色文本，共 {len(role_text_pairs)} 个角色")
+                self.log(f"检测到多角色文本，共 {len(role_text_pairs)} 个角色")
                 return self.generate_multi_role(role_text_pairs, output_path, mode, punct_chars, pause_time)
             else:
                 # 单角色处理，取出文本内容
                 _, content = role_text_pairs[0]
-                print(f"单角色处理，文本长度: {len(content)} 字符")
+                self.log(f"单角色处理，文本长度: {len(content)} 字符")
                 
                 # 自定义文件名（如果未提供有效的路径或是默认路径）
                 if not output_path or output_path.endswith("output.wav"):
@@ -99,11 +123,11 @@ class EnhancedTTSService:
                     
                     # 确保输出目录存在
                     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    print(f"已生成自定义输出文件名: {output_path}")
+                    self.log(f"已生成自定义输出文件名: {output_path}")
                 
                 return self.generate_with_segments(prompt_path, content, output_path, mode, punct_chars, pause_time)
         except Exception as e:
-            print(f"生成语音出错: {e}")
+            self.log(f"生成语音出错: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -127,14 +151,15 @@ class EnhancedTTSService:
         segments = TextProcessor.preprocess_text(text, punct_chars, self.replace_rules)
         
         if not segments:
-            print("警告: 文本预处理后没有有效的片段")
+            self.log("警告: 文本预处理后没有有效的片段")
             return None
             
         # 打印分割后的片段信息
-        print(f"文本被分割为 {len(segments)} 个片段，其中BR标记 {segments.count(TextProcessor.BR_TAG)} 个")
+        self.log(f"文本被分割为 {len(segments)} 个片段，其中BR标记 {segments.count(TextProcessor.BR_TAG)} 个")
         
         if len(segments) == 1:
             # 只有一个片段，直接使用原始服务
+            self.log("只有一个文本片段，直接进行处理")
             return self.tts_service.generate(prompt_path, segments[0], output_path, mode)
         
         # 有多个片段，逐一处理并合并
@@ -153,7 +178,7 @@ class EnhancedTTSService:
             temp_file = os.path.join(self.temp_dir, f"segment_{i}.wav")
             
             # 打印当前处理的片段
-            print(f"处理片段 {i+1}/{len(segments)}: {segment[:30]}{'...' if len(segment) > 30 else ''}")
+            self.log(f"处理片段 {i+1}/{len(segments)}: {segment[:30]}{'...' if len(segment) > 30 else ''}")
             
             # 使用原始服务生成当前片段
             try:
@@ -162,18 +187,18 @@ class EnhancedTTSService:
                 # 验证生成的文件有效
                 if os.path.exists(temp_file) and os.path.getsize(temp_file) > 0:
                     temp_files.append(temp_file)
-                    print(f"片段 {i+1} 生成成功: {temp_file}")
+                    self.log(f"片段 {i+1} 生成成功: {temp_file}")
                 else:
-                    print(f"警告: 片段 {i+1} 未成功生成音频或文件大小为0")
+                    self.log(f"警告: 片段 {i+1} 未成功生成音频或文件大小为0")
             except Exception as e:
-                print(f"处理片段 {i+1} 出错: {e}")
+                self.log(f"处理片段 {i+1} 出错: {e}")
         
         # 检查是否有有效的临时文件
         if not temp_files:
-            print("错误: 没有成功生成任何片段的音频")
+            self.log("错误: 没有成功生成任何片段的音频")
             return None
             
-        print(f"成功生成 {len(temp_files)} 个片段的音频，准备合并")
+        self.log(f"成功生成 {len(temp_files)} 个片段的音频，准备合并")
             
         # 合并所有音频文件，包括添加停顿
         return self.merge_audio_with_pauses(temp_files, segments, output_path, pause_time)
@@ -210,34 +235,34 @@ class EnhancedTTSService:
             
             # 确保输出目录存在
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            print(f"已生成自定义输出文件名: {output_path}")
+            self.log(f"已生成自定义输出文件名: {output_path}")
         
         role_audio_files = []
         
-        print(f"开始处理 {len(role_text_pairs)} 个角色的文本")
+        self.log(f"开始处理 {len(role_text_pairs)} 个角色的文本")
         
         # 记录找不到的角色
         missing_characters = []
         
         for i, (role_name, text) in enumerate(role_text_pairs):
-            print(f"处理角色 {i+1}/{len(role_text_pairs)}: {role_name}")
+            self.log(f"处理角色 {i+1}/{len(role_text_pairs)}: {role_name}")
             
             # 角色的文本为空，跳过
             if not text.strip():
-                print(f"警告: 角色 '{role_name}' 的文本为空，跳过处理")
+                self.log(f"警告: 角色 '{role_name}' 的文本为空，跳过处理")
                 continue
                 
             # 加载角色数据
             character_data = character_manager.load_character(role_name)
             
             if not character_data or "voice_path" not in character_data:
-                print(f"警告: 无法加载角色 '{role_name}'，跳过处理")
+                self.log(f"警告: 无法加载角色 '{role_name}'，跳过处理")
                 missing_characters.append(role_name)
                 continue
             else:
                 prompt_path = character_data["voice_path"]
                 if not os.path.exists(prompt_path):
-                    print(f"警告: 角色 '{role_name}' 的音频文件不存在: {prompt_path}")
+                    self.log(f"警告: 角色 '{role_name}' 的音频文件不存在: {prompt_path}")
                     missing_characters.append(role_name)
                     continue
             
@@ -248,24 +273,25 @@ class EnhancedTTSService:
             try:
                 role_audio = self.generate_with_segments(prompt_path, text, role_output_path, mode, punct_chars, pause_time)
                 
-                if role_audio and os.path.exists(role_audio) and os.path.getsize(role_audio) > 0:
+                if role_audio and os.path.exists(role_audio):
                     role_audio_files.append(role_audio)
-                    print(f"角色 '{role_name}' 的语音生成成功: {role_audio}")
+                    self.log(f"角色 '{role_name}' 的语音生成成功: {role_audio}")
                 else:
-                    print(f"警告: 角色 '{role_name}' 的语音生成失败")
+                    self.log(f"警告: 角色 '{role_name}' 的语音生成失败")
             except Exception as e:
-                print(f"处理角色 '{role_name}' 时出错: {e}")
+                self.log(f"生成角色 '{role_name}' 的语音出错: {e}")
         
-        # 报告找不到的角色
-        if missing_characters:
-            print(f"以下角色未找到: {', '.join(missing_characters)}")
-        
+        # 检查是否有成功生成的角色语音
         if not role_audio_files:
-            print("错误: 没有成功生成任何角色的语音")
+            error_msg = "错误: 没有成功生成任何角色的语音"
+            if missing_characters:
+                error_msg += f"，找不到以下角色: {', '.join(missing_characters)}"
+            self.log(error_msg)
             return None
-            
-        print(f"成功生成 {len(role_audio_files)} 个角色的语音，准备合并")
-            
+        
+        # 报告处理结果
+        self.log(f"成功生成 {len(role_audio_files)}/{len(role_text_pairs)} 个角色的语音，准备合并")
+        
         # 合并所有角色的音频
         return self.merge_audio_files(role_audio_files, output_path)
     
@@ -283,19 +309,19 @@ class EnhancedTTSService:
             str: 合并后的音频文件路径
         """
         if not audio_files:
-            print("错误: 没有可合并的音频文件")
+            self.log("错误: 没有可合并的音频文件")
             return None
             
         # 如果只有一个文件，直接返回
         if len(audio_files) == 1:
-            print(f"只有一个音频文件，直接使用: {audio_files[0]}")
+            self.log(f"只有一个音频文件，直接使用: {audio_files[0]}")
             import shutil
             shutil.copy2(audio_files[0], output_path)
             # 清理临时文件
             try:
                 os.remove(audio_files[0])
             except Exception as e:
-                print(f"删除临时文件时出错: {e}")
+                self.log(f"删除临时文件时出错: {e}")
             return output_path
             
         try:
@@ -305,13 +331,13 @@ class EnhancedTTSService:
                 if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                     valid_audio_files.append(file_path)
                 else:
-                    print(f"警告: 跳过无效音频文件: {file_path}")
+                    self.log(f"警告: 跳过无效音频文件: {file_path}")
             
             if not valid_audio_files:
-                print("错误: 没有有效的音频文件可以合并")
+                self.log("错误: 没有有效的音频文件可以合并")
                 return None
             
-            print(f"开始合并 {len(valid_audio_files)} 个音频文件")
+            self.log(f"开始合并 {len(valid_audio_files)} 个音频文件")
             
             # 创建一个映射关系，将非BR_TAG的segments位置映射到audio_files的索引
             segment_to_audio_map = {}
@@ -324,7 +350,7 @@ class EnhancedTTSService:
                         audio_idx += 1
             
             if not segment_to_audio_map:
-                print("错误: 无法建立段落和音频文件的映射关系")
+                self.log("错误: 无法建立段落和音频文件的映射关系")
                 return None
             
             # 加载音频波形
@@ -340,7 +366,7 @@ class EnhancedTTSService:
                     if sr is not None:
                         # 空行使用更长的停顿时间
                         br_pause_time = pause_time  # 空行停顿时间是普通停顿的2倍
-                        print(f"在空行位置 {i} 添加 {br_pause_time} 秒静音")
+                        self.log(f"在空行位置 {i} 添加 {br_pause_time} 秒静音")
                         silence_len = int(sr * br_pause_time)
                         silence = torch.zeros(1, silence_len)
                         waveforms.append(silence)
@@ -350,29 +376,29 @@ class EnhancedTTSService:
                     current_file = valid_audio_files[audio_index]
                     
                     try:
-                        print(f"加载音频文件: {current_file} (段落 {i+1})")
+                        self.log(f"加载音频文件: {current_file} (段落 {i+1})")
                         waveform, sample_rate = torchaudio.load(current_file)
                         waveforms.append(waveform)
                         sr = sample_rate
                         
                         # 在每个有效段落后添加普通停顿（除非下一个段落是BR_TAG）
                         if i + 1 < len(segments):                            
-                            print(f"在段落 {i+1} 后添加 {pause_time} 秒停顿")
+                            self.log(f"在段落 {i+1} 后添加 {pause_time} 秒停顿")
                             silence_len = int(sr * pause_time)
                             silence = torch.zeros(1, silence_len)
                             waveforms.append(silence)
                             
                     except Exception as e:
-                        print(f"加载音频文件时出错: {e}")
+                        self.log(f"加载音频文件时出错: {e}")
                     
                     last_processed_segment_idx = i
             
             # 检查waveforms是否为空
             if not waveforms:
-                print("错误: 没有成功加载任何音频波形")
+                self.log("错误: 没有成功加载任何音频波形")
                 return None
                 
-            print(f"成功加载 {len(waveforms)} 个波形")
+            self.log(f"成功加载 {len(waveforms)} 个波形")
                 
             # 合并所有波形
             try:
@@ -380,36 +406,36 @@ class EnhancedTTSService:
                 
                 # 保存合并后的音频
                 torchaudio.save(output_path, merged_waveform, sr)
-                print(f"成功保存合并后的音频到: {output_path}")
+                self.log(f"成功保存合并后的音频到: {output_path}")
                 
                 # 清理临时文件
                 for file_path in valid_audio_files:
                     try:
                         os.remove(file_path)
                     except Exception as e:
-                        print(f"删除临时文件时出错: {e}")
+                        self.log(f"删除临时文件时出错: {e}")
                         
                 return output_path
             except Exception as e:
-                print(f"合并音频波形时出错: {e}")
+                self.log(f"合并音频波形时出错: {e}")
                 
                 # 如果合并失败，返回第一个有效文件
                 if valid_audio_files:
-                    print(f"合并失败，使用第一个有效文件作为结果: {valid_audio_files[0]}")
+                    self.log(f"合并失败，使用第一个有效文件作为结果: {valid_audio_files[0]}")
                     import shutil
                     shutil.copy2(valid_audio_files[0], output_path)
                     return output_path
                 return None
                 
         except Exception as e:
-            print(f"合并音频文件时出错: {e}")
+            self.log(f"合并音频文件时出错: {e}")
             import traceback
             traceback.print_exc()
             
             # 如果出错，尝试使用第一个文件
             if audio_files and os.path.exists(audio_files[0]):
                 try:
-                    print(f"处理出错，使用第一个文件作为结果: {audio_files[0]}")
+                    self.log(f"处理出错，使用第一个文件作为结果: {audio_files[0]}")
                     import shutil
                     shutil.copy2(audio_files[0], output_path)
                     return output_path
@@ -429,19 +455,19 @@ class EnhancedTTSService:
             str: 合并后的音频文件路径
         """
         if not audio_files:
-            print("错误: 没有可合并的音频文件")
+            self.log("错误: 没有可合并的音频文件")
             return None
             
         # 如果只有一个文件，直接返回
         if len(audio_files) == 1:
-            print(f"只有一个音频文件，直接使用: {audio_files[0]}")
+            self.log(f"只有一个音频文件，直接使用: {audio_files[0]}")
             import shutil
             shutil.copy2(audio_files[0], output_path)
             # 清理临时文件
             try:
                 os.remove(audio_files[0])
             except Exception as e:
-                print(f"删除临时文件时出错: {e}")
+                self.log(f"删除临时文件时出错: {e}")
             return output_path
             
         try:
@@ -451,13 +477,13 @@ class EnhancedTTSService:
                 if os.path.exists(file_path) and os.path.getsize(file_path) > 0:
                     valid_audio_files.append(file_path)
                 else:
-                    print(f"警告: 跳过无效音频文件: {file_path}")
+                    self.log(f"警告: 跳过无效音频文件: {file_path}")
             
             if not valid_audio_files:
-                print("错误: 没有有效的音频文件可以合并")
+                self.log("错误: 没有有效的音频文件可以合并")
                 return None
                 
-            print(f"开始合并 {len(valid_audio_files)} 个音频文件")
+            self.log(f"开始合并 {len(valid_audio_files)} 个音频文件")
             
             # 加载所有音频文件
             waveforms = []
@@ -465,25 +491,25 @@ class EnhancedTTSService:
             
             for file_path in valid_audio_files:
                 try:
-                    print(f"加载音频文件: {file_path}")
+                    self.log(f"加载音频文件: {file_path}")
                     waveform, sample_rate = torchaudio.load(file_path)
                     waveforms.append(waveform)
                     sr = sample_rate
                 except Exception as e:
-                    print(f"加载音频文件时出错: {file_path}, 错误: {e}")
+                    self.log(f"加载音频文件时出错: {file_path}, 错误: {e}")
             
             # 检查是否有加载成功的波形
             if not waveforms:
-                print("错误: 没有成功加载任何音频波形")
+                self.log("错误: 没有成功加载任何音频波形")
                 # 如果有有效文件但加载失败，尝试使用第一个文件
                 if valid_audio_files:
-                    print(f"尝试直接使用第一个有效文件: {valid_audio_files[0]}")
+                    self.log(f"尝试直接使用第一个有效文件: {valid_audio_files[0]}")
                     import shutil
                     shutil.copy2(valid_audio_files[0], output_path)
                     return output_path
                 return None
                 
-            print(f"成功加载 {len(waveforms)} 个波形")
+            self.log(f"成功加载 {len(waveforms)} 个波形")
             
             # 合并所有波形
             try:
@@ -491,36 +517,36 @@ class EnhancedTTSService:
                 
                 # 保存合并后的音频
                 torchaudio.save(output_path, merged_waveform, sr)
-                print(f"成功保存合并后的音频到: {output_path}")
+                self.log(f"成功保存合并后的音频到: {output_path}")
                 
                 # 清理临时文件
                 for file_path in valid_audio_files:
                     try:
                         os.remove(file_path)
                     except Exception as e:
-                        print(f"删除临时文件时出错: {e}")
+                        self.log(f"删除临时文件时出错: {e}")
                         
                 return output_path
             except Exception as e:
-                print(f"合并音频波形时出错: {e}")
+                self.log(f"合并音频波形时出错: {e}")
                 
                 # 如果合并失败，返回第一个有效文件
                 if valid_audio_files:
-                    print(f"合并失败，使用第一个有效文件作为结果: {valid_audio_files[0]}")
+                    self.log(f"合并失败，使用第一个有效文件作为结果: {valid_audio_files[0]}")
                     import shutil
                     shutil.copy2(valid_audio_files[0], output_path)
                     return output_path
                 return None
                 
         except Exception as e:
-            print(f"合并音频文件时出错: {e}")
+            self.log(f"合并音频文件时出错: {e}")
             import traceback
             traceback.print_exc()
             
             # 如果出错，尝试使用第一个文件
             if audio_files and os.path.exists(audio_files[0]):
                 try:
-                    print(f"处理出错，使用第一个文件作为结果: {audio_files[0]}")
+                    self.log(f"处理出错，使用第一个文件作为结果: {audio_files[0]}")
                     import shutil
                     shutil.copy2(audio_files[0], output_path)
                     return output_path

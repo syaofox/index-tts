@@ -11,7 +11,7 @@ import gradio as gr
 class MainUI:
     """主界面构建类"""
     
-    def __init__(self, audio_player, prompt_selector, text_input):
+    def __init__(self, audio_player, prompt_selector, text_input, log_display):
         """
         初始化UI构建器
         
@@ -19,10 +19,12 @@ class MainUI:
             audio_player: 音频播放器组件
             prompt_selector: 提示选择器组件
             text_input: 文本输入组件
+            log_display: 日志显示组件
         """
         self.audio_player = audio_player
         self.prompt_selector = prompt_selector
         self.text_input = text_input
+        self.log_display = log_display
         
     def build(self, generate_callback, update_prompt_callback):
         """
@@ -43,15 +45,16 @@ class MainUI:
             
             with gr.Tab("音频生成"):
                 # 布局组件
-                prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio = self._create_main_tab()
+                prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area = self._create_main_tab()
                 
                 self._add_multi_role_instructions()
                 
-                # 绑定事件
+                # 绑定事件 - 使用每一个yield更新UI
                 gen_button.click(
-                    generate_callback,
+                    fn=generate_callback,
                     inputs=[prompt_audio, text_area, mode_selector, punct_chars, pause_time],
-                    outputs=[output_audio]
+                    outputs=[output_audio, log_area],
+                    show_progress="minimal"  # 显示最小的进度指示
                 )
                 
                 prompt_dropdown.change(
@@ -98,7 +101,10 @@ class MainUI:
         
         output_audio = gr.Audio(label="生成结果", visible=True)
         
-        return prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio
+        # 添加日志显示区域
+        log_area = self.log_display.create_log_area(label="处理日志")
+        
+        return prompt_audio, prompt_dropdown, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area
     
     def _add_multi_role_instructions(self):
         """添加多角色使用说明"""

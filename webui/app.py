@@ -36,6 +36,7 @@ import gradio as gr
 from webui.components.audio_player import AudioPlayer
 from webui.components.prompt_selector import PromptSelector
 from webui.components.text_input import TextInput
+from webui.components.log_display import LogDisplay
 
 # 导入服务
 from webui.services.tts_service import TTSService
@@ -75,6 +76,7 @@ def main():
     audio_player = AudioPlayer()
     prompt_selector = PromptSelector(file_service)
     text_input = TextInput()
+    log_display = LogDisplay()
     
     # 初始化事件处理器
     event_handlers = EventHandlers(
@@ -88,7 +90,8 @@ def main():
     main_ui = MainUI(
         audio_player=audio_player,
         prompt_selector=prompt_selector,
-        text_input=text_input
+        text_input=text_input,
+        log_display=log_display
     )
     
     # 构建Gradio界面
