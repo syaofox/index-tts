@@ -49,6 +49,32 @@ class FileService:
             files.extend(glob.glob(pattern))
         return [os.path.basename(f) for f in files]
     
+    def get_output_audio_files(self, exts: Optional[List[str]] = None) -> List[str]:
+        """获取输出目录中所有音频文件的列表
+        
+        Args:
+            exts: 文件扩展名列表，默认为常见音频格式
+        
+        Returns:
+            输出目录中音频文件的完整路径列表和文件名列表的元组
+        """
+        if exts is None:
+            exts = [".wav", ".mp3", ".flac", ".ogg"]
+            
+        files = []
+        for ext in exts:
+            pattern = os.path.join(self.outputs_dir, f"*{ext}")
+            files.extend(glob.glob(pattern))
+        
+        # 按修改时间降序排序，使最新的文件在前面
+        files.sort(key=os.path.getmtime, reverse=True)
+        
+        # 返回完整路径和文件名的元组
+        file_paths = files
+        file_names = [os.path.basename(f) for f in files]
+        
+        return file_paths, file_names
+    
     def refresh_cache(self):
         """刷新预设名称缓存"""
         self._prompt_names_cache = None

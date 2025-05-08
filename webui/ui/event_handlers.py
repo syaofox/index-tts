@@ -167,6 +167,14 @@ class EventHandlers:
                     continue
                 break
         
+        # 生成完成后，提示用户刷新历史音频列表
+        try:
+            # 如果生成成功且有结果
+            if self.result:
+                self.enqueue_log("生成完成！点击【刷新列表】后，在下拉框中选择音频文件即可播放。")
+        except Exception as e:
+            self.enqueue_log(f"刷新历史音频列表时出错: {e}")
+        
         # 生成完成后，返回最终结果
         yield gr.update(value=self.result, visible=True), self.logs
         
@@ -369,44 +377,106 @@ class EventHandlers:
     
     def delete_preset(self, preset_name):
         """
-        删除选中的预设
+        删除预设
         
         Args:
             preset_name: 要删除的预设名称
             
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新, 音频更新)
+            tuple: (更新后的预设下拉列表, 日志更新, 音频路径更新)
         """
-        # 清空之前的日志
-        self.logs = ""
-        
         if not preset_name or preset_name == "无":
-            self.logs = "错误: 未选择任何有效预设"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
-        
+            return gr.update(choices=self.file_service.get_prompt_names(), value="无"), "未选择预设", None
+            
         try:
-            # 获取预设文件路径
-            preset_path = self.file_service.get_prompt_path(preset_name)
+            # 获取提示音频文件路径
+            audio_path = self.file_service.get_prompt_path(preset_name)
             
-            if os.path.exists(preset_path):
-                # 删除预设文件
-                os.remove(preset_path)
-                self.logs = f"已删除预设 '{preset_name}'"
-            else:
-                self.logs = f"预设 '{preset_name}' 不存在"
-            
-            # 添加一个小延迟，确保文件系统操作完成
-            time.sleep(0.2)
-            
-            # 刷新文件服务的缓存（如果有这个方法）
-            if hasattr(self.file_service, 'refresh_cache'):
+            # 检查文件是否存在
+            if os.path.exists(audio_path):
+                # 删除文件
+                os.remove(audio_path)
+                
+                # 刷新缓存
                 self.file_service.refresh_cache()
-            
-            # 返回更新后的预设列表
-            updated_prompt_names = sorted(self.file_service.get_prompt_names())
-            updated_choices = ["无"] + updated_prompt_names
-            return gr.update(choices=updated_choices, value="无"), self.logs, gr.update(value=None)
-            
+                
+                # 获取更新后的预设列表
+                preset_choices = self.file_service.get_prompt_names()
+                
+                return gr.update(choices=preset_choices, value="无"), f"已删除预设: {preset_name}", None
+            else:
+                return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name), f"文件不存在: {audio_path}", None
         except Exception as e:
-            self.logs = f"删除预设时出错: {str(e)}"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None) 
+            return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name), f"删除预设出错: {e}", None
+            
+    def get_history_audio_files(self):
+        """
+        获取输出目录中所有历史音频文件
+        
+        Returns:
+            tuple: (文件路径列表, 文件名列表)
+        """
+        try:
+            # 获取历史音频文件
+            file_paths, file_names = self.file_service.get_output_audio_files()
+            
+            # 记录日志
+            self.enqueue_log(f"找到 {len(file_names)} 个历史音频文件")
+            
+            return file_paths, file_names
+        except Exception as e:
+            self.enqueue_log(f"获取历史音频文件时出错: {e}")
+            return [], []
+            
+    def play_history_audio(self, selected_file_name):
+        """
+        播放选定的历史音频文件
+        
+        Args:
+            selected_file_name: 选定的音频文件名
+            
+        Returns:
+            音频组件更新和日志更新
+        """
+        if not selected_file_name:
+            # 下拉框可能被清空或未选择文件时，不显示提示信息，直接返回空
+            return None, self.logs
+            
+        try:
+            # 获取所有历史音频文件
+            file_paths, file_names = self.file_service.get_output_audio_files()
+            
+            # 通过文件名找到文件路径
+            file_index = file_names.index(selected_file_name)
+            file_path = file_paths[file_index]
+            
+            # 记录日志
+            self.enqueue_log(f"正在播放历史音频: {selected_file_name}")
+            
+            # 返回音频更新
+            return file_path, self.update_logs(f"正在播放历史音频: {selected_file_name}")
+        except ValueError:
+            self.enqueue_log(f"找不到文件: {selected_file_name}")
+            return None, self.update_logs(f"找不到文件: {selected_file_name}")
+        except Exception as e:
+            self.enqueue_log(f"播放历史音频时出错: {e}")
+            return None, self.update_logs(f"播放历史音频时出错: {e}")
+            
+    def refresh_history_files(self):
+        """
+        刷新历史音频文件列表
+        
+        Returns:
+            tuple: 更新后的下拉框选项和日志更新
+        """
+        try:
+            # 获取最新的历史音频文件
+            _, file_names = self.file_service.get_output_audio_files()
+            
+            # 记录日志
+            self.enqueue_log(f"已刷新历史音频列表，共 {len(file_names)} 个文件")
+            
+            return gr.update(choices=file_names, value=None), self.update_logs(f"已刷新历史音频列表，共 {len(file_names)} 个文件")
+        except Exception as e:
+            self.enqueue_log(f"刷新历史音频列表时出错: {e}")
+            return gr.update(choices=[], value=None), self.update_logs(f"刷新历史音频列表时出错: {e}") 

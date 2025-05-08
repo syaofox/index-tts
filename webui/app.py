@@ -100,7 +100,9 @@ def main():
         update_prompt_callback=event_handlers.update_prompt_from_dropdown,
         save_preset_callback=event_handlers.save_preset,
         refresh_presets_callback=event_handlers.refresh_presets,
-        delete_preset_callback=event_handlers.delete_preset
+        delete_preset_callback=event_handlers.delete_preset,
+        play_history_callback=event_handlers.play_history_audio,
+        refresh_history_callback=event_handlers.refresh_history_files
     )
     
     # 启动Gradio服务

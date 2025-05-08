@@ -26,7 +26,7 @@ class MainUI:
         self.text_input = text_input
         self.log_display = log_display
         
-    def build(self, generate_callback, update_prompt_callback, save_preset_callback=None, refresh_presets_callback=None, delete_preset_callback=None):
+    def build(self, generate_callback, update_prompt_callback, save_preset_callback=None, refresh_presets_callback=None, delete_preset_callback=None, play_history_callback=None, refresh_history_callback=None):
         """
         构建Gradio界面
         
@@ -36,6 +36,8 @@ class MainUI:
             save_preset_callback: 保存预设的回调函数
             refresh_presets_callback: 刷新预设的回调函数
             delete_preset_callback: 删除预设的回调函数
+            play_history_callback: 播放历史音频的回调函数
+            refresh_history_callback: 刷新历史音频列表的回调函数
             
         Returns:
             gr.Blocks: Gradio界面对象
@@ -48,7 +50,7 @@ class MainUI:
             
             with gr.Tab("音频生成"):
                 # 布局组件
-                prompt_audio, prompt_dropdown, _, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area = self._create_main_tab()
+                prompt_audio, prompt_dropdown, _, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio = self._create_main_tab()
                 
                 self._add_multi_role_instructions()
                 
@@ -86,6 +88,32 @@ class MainUI:
                         fn=delete_preset_callback,
                         inputs=[prompt_dropdown],
                         outputs=[prompt_dropdown, log_area, prompt_audio]  # 添加prompt_audio作为输出参数
+                    )
+                
+                # 将历史音频下拉框的change事件绑定到播放回调函数
+                if play_history_callback:
+                    history_dropdown.change(
+                        fn=play_history_callback,
+                        inputs=[history_dropdown],
+                        outputs=[history_audio, log_area]
+                    )
+                
+                # 绑定刷新历史音频列表事件
+                if refresh_history_callback:
+                    refresh_history_btn.click(
+                        fn=refresh_history_callback,
+                        inputs=[],
+                        outputs=[history_dropdown, log_area]
+                    )
+                    
+                    # 不再使用_js参数，而是在生成音频完成后由用户手动刷新或通过事件处理器内部处理
+                    
+                    # 在应用启动时初始化历史音频列表
+                    demo.load(
+                        fn=refresh_history_callback,
+                        inputs=[],
+                        outputs=[history_dropdown, log_area],
+                        show_progress=False  # 不显示进度
                     )
         
         return demo
@@ -138,8 +166,22 @@ class MainUI:
         # 添加日志显示区域
         log_area = self.log_display.create_log_area(label="处理日志")
         
-        # 返回组件，但移除了preset_name
-        return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area
+        # 添加历史音频回放区域
+        with gr.Row(variant="panel"):
+            gr.HTML("<h3>历史音频回放</h3>")
+        
+        with gr.Row():
+            # 历史音频下拉列表
+            history_dropdown = gr.Dropdown(label="选择历史音频", choices=[], interactive=True)
+            
+            # 只保留刷新按钮，移除播放按钮
+            refresh_history_btn = gr.Button("刷新列表", size="sm")
+        
+        # 历史音频播放器
+        history_audio = gr.Audio(label="历史音频播放", visible=True)
+        
+        # 返回组件，包括新添加的历史音频组件，移除了不再需要的play_history_btn
+        return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio
     
     def _add_multi_role_instructions(self):
         """添加多角色使用说明"""
