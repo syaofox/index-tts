@@ -111,13 +111,10 @@ class MainUI:
                     prompt_dropdown = self.prompt_selector.create_dropdown_component(label="或选择预设提示")
                 
                 # 预设管理区域重新布局 - 移除预设名称输入框
-                with gr.Row(equal_height=True):
-                    with gr.Column(scale=1):
-                        save_btn = gr.Button("保存为预设", size="md")
-                    with gr.Column(scale=1):
-                        refresh_btn = gr.Button("刷新预设", size="md")
-                    with gr.Column(scale=1):
-                        delete_btn = gr.Button("删除预设", size="md")
+                with gr.Row(equal_height=True, variant="panel"):
+                    save_btn = gr.Button("保存为预设", size="md")
+                    refresh_btn = gr.Button("刷新预设", size="md")
+                    delete_btn = gr.Button("删除预设", size="md")
             
             with gr.Column():
                 text_area = self.text_input.create_text_area(label="请输入目标文本")
