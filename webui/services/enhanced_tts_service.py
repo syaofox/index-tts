@@ -107,7 +107,13 @@ class EnhancedTTSService:
                 if not output_path or output_path.endswith("output.wav"):
                     # 从提示音频路径中提取角色名（如果可能）
                     prompt_filename = os.path.basename(prompt_path)
-                    speaker_name = os.path.splitext(prompt_filename)[0]
+                    full_name = os.path.splitext(prompt_filename)[0]
+                    
+                    # 提取第一个下划线之前的内容作为角色名
+                    if "_" in full_name:
+                        speaker_name = full_name.split("_", 1)[0]
+                    else:
+                        speaker_name = full_name
                     
                     # 清理文本内容（取前50个字符）
                     text_sample = content.strip().replace("\n", "").replace("\r", "").replace(" ", "")
