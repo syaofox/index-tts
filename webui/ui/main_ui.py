@@ -159,26 +159,26 @@ class MainUI:
                     punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
                     pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
                 
-                gen_button = gr.Button("生成语音")
+                gen_button = gr.Button("生成语音", variant="primary")
         
         output_audio = gr.Audio(label="生成结果", visible=True)
         
+        
+        
+        # 添加历史音频回放区域（使用Accordion使其可折叠）
+        with gr.Accordion("历史音频回放", open=False):  # 默认为折叠状态
+            with gr.Row():
+                # 历史音频下拉列表
+                history_dropdown = gr.Dropdown(label="选择历史音频", choices=[], interactive=True, scale=5)
+                
+                # 刷新按钮
+                refresh_history_btn = gr.Button("刷新列表", size="md",scale=1)
+            
+            # 历史音频播放器
+            history_audio = gr.Audio(label="历史音频播放", visible=True)
+
         # 添加日志显示区域
         log_area = self.log_display.create_log_area(label="处理日志")
         
-        # 添加历史音频回放区域
-        with gr.Row(variant="panel"):
-            gr.HTML("<h3>历史音频回放</h3>")
-        
-        with gr.Row():
-            # 历史音频下拉列表
-            history_dropdown = gr.Dropdown(label="选择历史音频", choices=[], interactive=True)
-            
-            # 只保留刷新按钮，移除播放按钮
-            refresh_history_btn = gr.Button("刷新列表", size="sm")
-        
-        # 历史音频播放器
-        history_audio = gr.Audio(label="历史音频播放", visible=True)
-        
-        # 返回组件，包括新添加的历史音频组件，移除了不再需要的play_history_btn
+        # 返回组件
         return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio
