@@ -11,18 +11,12 @@ import torchaudio
 import time
 import re
 import numpy as np
+import traceback
 
-# 使用try-except适应不同的导入场景
-try:
-    # 直接运行时的导入路径
-    from utils.character_manager import CharacterManager
-    from utils.text_processor import TextProcessor
-    from utils.audio_utils import AudioUtils
-except ImportError:
-    # 以模块方式运行时的导入路径
-    from webui.utils.character_manager import CharacterManager
-    from webui.utils.text_processor import TextProcessor
-    from webui.utils.audio_utils import AudioUtils
+# 统一使用相对导入路径
+from webui.utils.character_manager import CharacterManager
+from webui.utils.text_processor import TextProcessor
+from webui.utils.audio_utils import AudioUtils
 
 
 class EnhancedTTSService:
@@ -37,11 +31,8 @@ class EnhancedTTSService:
         """
         self.tts_service = tts_service
         
-        # 从配置文件加载文本替换规则 - 支持多种运行方式
-        config_path = "webui/text_replace_config.txt"
-        if not os.path.exists(config_path):
-            # 尝试相对路径
-            config_path = "text_replace_config.txt"
+        # 从配置文件加载文本替换规则 - 使用固定的相对路径
+        config_path = os.path.join("webui", "text_replace_config.txt")
         
         self.replace_rules = self.load_replace_rules(config_path)
         
@@ -73,9 +64,11 @@ class EnhancedTTSService:
         Args:
             message: 日志消息
         """
-        # 打印到终端并通过回调发送到UI
-        print(message)
-        if self.log_callback and self.log_callback != print:
+        # 如果回调为None或等于print，则直接打印到控制台
+        # 否则调用自定义回调函数
+        if self.log_callback is None or self.log_callback == print:
+            print(message)
+        else:
             self.log_callback(message)
         
     def load_replace_rules(self, config_path):
@@ -141,10 +134,7 @@ class EnhancedTTSService:
             return self.generate_with_segments(prompt_path, text, output_path, mode, punct_chars, pause_time)
                 
         except Exception as e:
-            self.log(f"生成语音出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+            return self._handle_exception("生成语音出错", e)
             
     def _generate_output_filename(self, prompt_path, text, is_multi_role=False, role_text_pairs=None):
         """
@@ -209,6 +199,46 @@ class EnhancedTTSService:
             timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
             return os.path.join("outputs", f"audio_{timestamp}.wav")
     
+    def _process_text_segment(self, prompt_path, segment, role_name=None, mode="normal"):
+        """
+        处理单个文本片段，生成音频数据
+        
+        Args:
+            prompt_path: 提示音频文件路径
+            segment: 文本片段
+            role_name: 角色名称(可选，用于日志)
+            mode: 推理模式，"normal"或"fast"
+            
+        Returns:
+            tuple: (是否成功, 采样率, 波形数据)
+        """
+        try:
+            result = self.tts_service.generate(prompt_path, segment, None, mode)
+            
+            # 验证生成的音频数据有效
+            if isinstance(result, tuple) and len(result) == 2:
+                sample_rate, wave_data = result
+                
+                if role_name:
+                    self.log(f"角色 {role_name} 的音频片段生成成功，波形长度: {len(wave_data)}")
+                else:
+                    self.log(f"音频片段生成成功，波形长度: {len(wave_data)}")
+                    
+                return True, sample_rate, wave_data
+            else:
+                if role_name:
+                    self.log(f"警告: 角色 {role_name} 的音频生成失败或格式不正确")
+                else:
+                    self.log(f"警告: 音频生成失败或格式不正确")
+                return False, None, None
+                
+        except Exception as e:
+            if role_name:
+                self._handle_exception(f"处理角色 {role_name} 的音频片段出错", e, False)
+            else:
+                self._handle_exception(f"处理音频片段出错", e, False)
+            return False, None, None
+    
     def generate_with_segments(self, prompt_path, text, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
         """
         按段落生成语音，直接在内存中处理音频流
@@ -256,21 +286,12 @@ class EnhancedTTSService:
             # 打印当前处理的片段
             self.log(f"处理片段 {i+1}/{len(segments)}: {segment[:30]}{'...' if len(segment) > 30 else ''}")
             
-            # 使用原始服务生成当前片段，直接返回音频数据
-            try:
-                result = self.tts_service.generate(prompt_path, segment, None, mode)
-                
-                # 验证生成的音频数据有效
-                if isinstance(result, tuple) and len(result) == 2:
-                    sample_rate, wave_data = result
-                    segment_audios.append((i, wave_data))
-                    self.log(f"片段 {i+1} 生成成功，波形长度: {len(wave_data)}")
-                else:
-                    self.log(f"警告: 片段 {i+1} 生成失败或格式不正确")
-            except Exception as e:
-                self.log(f"处理片段 {i+1} 出错: {e}")
-                import traceback
-                traceback.print_exc()
+            # 使用辅助方法处理文本片段
+            success, sample_rate, wave_data = self._process_text_segment(prompt_path, segment, None, mode)
+            
+            if success:
+                segment_audios.append((i, wave_data))
+                self.log(f"片段 {i+1} 生成成功，波形长度: {len(wave_data)}")
         
         # 检查是否有有效的音频片段
         if not segment_audios:
@@ -300,10 +321,7 @@ class EnhancedTTSService:
             self.log(f"成功保存音频到 {output_path}")
             return output_path
         except Exception as e:
-            self.log(f"保存音频文件出错: {e}")
-            import traceback
-            traceback.print_exc()
-            return None
+            return self._handle_exception("保存音频文件出错", e)
     
     def generate_multi_role_from_segments(self, character_text_segments, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
         """
@@ -319,12 +337,6 @@ class EnhancedTTSService:
         Returns:
             str: 生成的音频文件路径
         """
-        import torch
-        import numpy as np
-        import torchaudio
-        import os
-        import time
-        
         # 自定义文件名（如果未提供有效的路径或是默认路径）
         if not output_path or output_path.endswith("output.wav"):
             output_path = self._generate_output_filename(None, "", True, character_text_segments)
@@ -365,20 +377,10 @@ class EnhancedTTSService:
             if len(segments) == 1:
                 # 只有一个片段，直接使用原始服务
                 self.log(f"角色 {role_name} 只有一个文本片段，直接进行处理")
-                try:
-                    result = self.tts_service.generate(prompt_path, segments[0], None, mode)
-                    
-                    # 验证生成的音频数据有效
-                    if isinstance(result, tuple) and len(result) == 2:
-                        sample_rate, wave_data = result
-                        role_audio_segments.append((role_name, wave_data, sample_rate))
-                        self.log(f"角色 {role_name} 的音频生成成功，波形长度: {len(wave_data)}")
-                    else:
-                        self.log(f"警告: 角色 {role_name} 的音频生成失败或格式不正确")
-                except Exception as e:
-                    self.log(f"处理角色 {role_name} 出错: {e}")
-                    import traceback
-                    traceback.print_exc()
+                success, sample_rate, wave_data = self._process_text_segment(prompt_path, segments[0], role_name, mode)
+                
+                if success:
+                    role_audio_segments.append((role_name, wave_data, sample_rate))
                     
             else:
                 # 有多个片段，逐一处理并在内存中合并
@@ -395,21 +397,11 @@ class EnhancedTTSService:
                     # 打印当前处理的片段
                     self.log(f"处理角色 {role_name} 的片段 {j+1}/{len(segments)}: {segment[:30]}{'...' if len(segment) > 30 else ''}")
                     
-                    # 使用原始服务生成当前片段，直接返回音频数据
-                    try:
-                        result = self.tts_service.generate(prompt_path, segment, None, mode)
-                        
-                        # 验证生成的音频数据有效
-                        if isinstance(result, tuple) and len(result) == 2:
-                            sample_rate, wave_data = result
-                            role_segment_audios.append((j, wave_data))
-                            self.log(f"角色 {role_name} 的片段 {j+1} 生成成功，波形长度: {len(wave_data)}")
-                        else:
-                            self.log(f"警告: 角色 {role_name} 的片段 {j+1} 生成失败或格式不正确")
-                    except Exception as e:
-                        self.log(f"处理角色 {role_name} 的片段 {j+1} 出错: {e}")
-                        import traceback
-                        traceback.print_exc()
+                    # 使用辅助方法处理文本片段
+                    success, _, wave_data = self._process_text_segment(prompt_path, segment, role_name, mode)
+                    
+                    if success:
+                        role_segment_audios.append((j, wave_data))
                 
                 # 检查是否有有效的音频片段
                 if not role_segment_audios:
@@ -462,108 +454,18 @@ class EnhancedTTSService:
                 if sr != final_sr:
                     self.log(f"警告: 角色 {role_name} 的采样率 {sr} 与目标采样率 {final_sr} 不一致，可能导致质量问题")
                 
-                # 确保数据格式正确
-                if isinstance(wave_data, np.ndarray):
-                    # 将NumPy数组转换为Torch张量，并确保是浮点型
-                    tensor_data = torch.tensor(wave_data, dtype=torch.float32)
-                    # 标准化维度：确保是2D张量 [通道数, 样本数]
-                    if tensor_data.dim() == 1:
-                        tensor_data = tensor_data.unsqueeze(0)  # [1, 样本数]
-                    elif tensor_data.dim() == 3:
-                        # 如果是3D张量，取第一个维度的数据
-                        self.log(f"警告: 角色 {role_name} 的音频是3D张量，取第一个维度: {tensor_data.shape}")
-                        tensor_data = tensor_data[0]
-                    
-                    # 检查并修正张量维度顺序
-                    if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
-                        self.log(f"警告: 检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
-                        # 如果第一维很大，可能是颠倒的，尝试转置
-                        tensor_data = tensor_data.transpose(0, 1)
-                        self.log(f"转置后形状: {tensor_data.shape}")
-                    
-                    # 记录第一个有效片段的形状
-                    if first_segment_shape is None:
-                        # 确保不超过2个通道（通常为单声道或立体声）
-                        first_segment_shape = min(tensor_data.shape[0], 2)
-                    
-                    # 确保通道数一致且合理（不超过2个通道）
-                    if tensor_data.shape[0] != first_segment_shape:
-                        self.log(f"调整角色 {role_name} 的音频通道数从 {tensor_data.shape[0]} 到 {first_segment_shape}")
-                        if tensor_data.shape[0] < first_segment_shape:
-                            # 如果通道数少，复制已有通道到指定大小
-                            tensor_data = tensor_data.repeat(first_segment_shape // tensor_data.shape[0] + 1, 1)[:first_segment_shape]
-                        else:
-                            # 如果通道数多，只保留需要的通道
-                            tensor_data = tensor_data[:first_segment_shape]
-                    
-                    processed_segments.append(tensor_data)
-                elif isinstance(wave_data, torch.Tensor):
-                    # 确保Torch张量有正确的维度和类型
-                    tensor_data = wave_data.float()  # 转换为float32类型
-                    
-                    # 标准化维度：确保是2D张量 [通道数, 样本数]
-                    if tensor_data.dim() == 1:
-                        tensor_data = tensor_data.unsqueeze(0)  # [1, 样本数]
-                    elif tensor_data.dim() == 3:
-                        # 如果是3D张量，取第一个维度的数据
-                        self.log(f"警告: 角色 {role_name} 的音频是3D张量，取第一个维度: {tensor_data.shape}")
-                        tensor_data = tensor_data[0]
-                    
-                    # 检查并修正张量维度顺序
-                    if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
-                        self.log(f"警告: 检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
-                        # 如果第一维很大，可能是颠倒的，尝试转置
-                        tensor_data = tensor_data.transpose(0, 1)
-                        self.log(f"转置后形状: {tensor_data.shape}")
-                    
-                    # 记录第一个有效片段的形状
-                    if first_segment_shape is None:
-                        # 确保不超过2个通道（通常为单声道或立体声）
-                        first_segment_shape = min(tensor_data.shape[0], 2)
-                    
-                    # 确保通道数一致且合理（不超过2个通道）
-                    if tensor_data.shape[0] != first_segment_shape:
-                        self.log(f"调整角色 {role_name} 的音频通道数从 {tensor_data.shape[0]} 到 {first_segment_shape}")
-                        if tensor_data.shape[0] < first_segment_shape:
-                            # 如果通道数少，复制已有通道到指定大小
-                            tensor_data = tensor_data.repeat(first_segment_shape // tensor_data.shape[0] + 1, 1)[:first_segment_shape]
-                        else:
-                            # 如果通道数多，只保留需要的通道
-                            tensor_data = tensor_data[:first_segment_shape]
-                    
-                    processed_segments.append(tensor_data)
-                else:
-                    self.log(f"警告: 角色 {role_name} 的音频数据类型不支持: {type(wave_data)}，尝试转换为tensor")
-                    try:
-                        # 尝试将未知类型转换为tensor
-                        tensor_data = torch.tensor(wave_data, dtype=torch.float32)
-                        if tensor_data.dim() == 1:
-                            tensor_data = tensor_data.unsqueeze(0)
-                        elif tensor_data.dim() == 3:
-                            tensor_data = tensor_data[0]
-                        
-                        # 检查并修正张量维度顺序
-                        if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
-                            self.log(f"警告: 检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
-                            tensor_data = tensor_data.transpose(0, 1)
-                            self.log(f"转置后形状: {tensor_data.shape}")
-                        
-                        # 记录第一个有效片段的形状
-                        if first_segment_shape is None:
-                            # 确保不超过2个通道（通常为单声道或立体声）
-                            first_segment_shape = min(tensor_data.shape[0], 2)
-                        
-                        # 确保通道数一致且合理
-                        if tensor_data.shape[0] != first_segment_shape:
-                            if tensor_data.shape[0] < first_segment_shape:
-                                tensor_data = tensor_data.repeat(first_segment_shape // tensor_data.shape[0] + 1, 1)[:first_segment_shape]
-                            else:
-                                tensor_data = tensor_data[:first_segment_shape]
-                        
-                        processed_segments.append(tensor_data)
-                    except:
-                        self.log(f"错误: 无法将角色 {role_name} 的音频数据转换为tensor")
-                        continue
+                # 标准化音频数据
+                normalized_wave_data, is_valid, updated_shape = self._normalize_audio_data(wave_data, role_name, first_segment_shape)
+                
+                if not is_valid:
+                    self.log(f"警告: 角色 {role_name} 的音频数据标准化失败，跳过此角色")
+                    continue
+                
+                processed_segments.append(normalized_wave_data)
+                
+                # 更新或使用通道数信息
+                if first_segment_shape is None:
+                    first_segment_shape = updated_shape
             
             # 检查是否有有效的处理片段
             if not processed_segments:
@@ -606,7 +508,78 @@ class EnhancedTTSService:
             return output_path
             
         except Exception as e:
-            self.log(f"合并多角色音频出错: {e}")
-            import traceback
-            traceback.print_exc()            
-            return None 
+            return self._handle_exception("合并多角色音频出错", e)
+
+    def _normalize_audio_data(self, wave_data, role_name, first_segment_shape=None):
+        """
+        标准化音频数据格式，处理不同类型的输入
+        
+        Args:
+            wave_data: 原始音频数据(numpy数组或torch张量)
+            role_name: 角色名称(用于日志)
+            first_segment_shape: 首个片段的通道数(用于保持一致性)
+            
+        Returns:
+            tuple: (处理后的音频张量, 是否成功, 更新后的首个片段通道数)
+        """
+        try:
+            # 尝试将数据转换为torch张量
+            if isinstance(wave_data, np.ndarray):
+                tensor_data = torch.tensor(wave_data, dtype=torch.float32)
+            elif isinstance(wave_data, torch.Tensor):
+                tensor_data = wave_data.float()  # 转换为float32类型
+            else:
+                # 尝试将未知类型转换为tensor
+                tensor_data = torch.tensor(wave_data, dtype=torch.float32)
+            
+            # 标准化维度：确保是2D张量 [通道数, 样本数]
+            if tensor_data.dim() == 1:
+                tensor_data = tensor_data.unsqueeze(0)  # [1, 样本数]
+            elif tensor_data.dim() == 3:
+                # 如果是3D张量，取第一个维度的数据
+                self.log(f"警告: 角色 {role_name} 的音频是3D张量，取第一个维度: {tensor_data.shape}")
+                tensor_data = tensor_data[0]
+            
+            # 检查并修正张量维度顺序
+            if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
+                self.log(f"警告: 检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
+                tensor_data = tensor_data.transpose(0, 1)
+                self.log(f"转置后形状: {tensor_data.shape}")
+            
+            # 更新或使用通道数信息
+            current_shape = min(tensor_data.shape[0], 2)  # 限制最多2个通道
+            if first_segment_shape is None:
+                first_segment_shape = current_shape
+            
+            # 确保通道数一致
+            if tensor_data.shape[0] != first_segment_shape:
+                self.log(f"调整角色 {role_name} 的音频通道数从 {tensor_data.shape[0]} 到 {first_segment_shape}")
+                if tensor_data.shape[0] < first_segment_shape:
+                    # 如果通道数少，复制已有通道到指定大小
+                    tensor_data = tensor_data.repeat(first_segment_shape // tensor_data.shape[0] + 1, 1)[:first_segment_shape]
+                else:
+                    # 如果通道数多，只保留需要的通道
+                    tensor_data = tensor_data[:first_segment_shape]
+            
+            return tensor_data, True, first_segment_shape
+            
+        except Exception as e:
+            self.log(f"标准化角色 {role_name} 的音频数据时出错: {e}")
+            return None, False, first_segment_shape
+
+    def _handle_exception(self, error_msg, e, show_traceback=True):
+        """
+        统一处理异常的辅助方法
+        
+        Args:
+            error_msg: 错误消息
+            e: 异常对象
+            show_traceback: 是否显示堆栈跟踪
+            
+        Returns:
+            None: 始终返回None以简化错误处理代码
+        """
+        self.log(f"{error_msg}: {e}")
+        if show_traceback:
+            traceback.print_exc()
+        return None 
