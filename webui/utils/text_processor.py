@@ -36,8 +36,7 @@ class TextProcessor:
         text = TextProcessor.clean_quotes(text)
 
         # 应用替换规则（如果有）
-        if replace_rules:
-            print(f"应用替换规则: {replace_rules}")
+        if replace_rules:            
             text = TextProcessor.apply_replace_rules(text, replace_rules)
             
         # 将文本按行分割
@@ -102,7 +101,7 @@ class TextProcessor:
         """
         清除引号
         """
-        pattern = r'[\"\'"\"\*\#]'
+        pattern = r'[\"\'\*\#“”]'
         return re.sub(pattern, '', text)
        
     @classmethod
@@ -128,6 +127,7 @@ class TextProcessor:
                 modified_search_str = search_str.replace(replace_from, replace_to)
                 # 替换原文本中的搜索字符串为修改后的字符串
                 result_text = result_text.replace(search_str, modified_search_str)
+                print(f"{search_str} -> {modified_search_str}")                
         
         return result_text
     
@@ -175,7 +175,7 @@ class TextProcessor:
     
         
     @classmethod
-    def load_replace_rules_from_file(cls, config_path: str) -> List[Tuple[str, str, str]]:
+    def load_replace_rules(cls, config_path: str) -> List[Tuple[str, str, str]]:
         """
         从配置文件加载文本替换规则
         
