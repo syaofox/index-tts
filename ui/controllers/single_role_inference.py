@@ -201,7 +201,7 @@ class SingleRoleInference(InferenceBase):
             
             # 应用文本替换规则（如果有）
             if self.replace_rules:
-                text = TextProcessor.apply_replace_rules(text, self.replace_rules)
+                text = TextProcessor.apply_replace_rulesreplace_rules(text, self.replace_rules)
             
             # 使用内存模式进行推理
             result = self.strategy.infer(self.tts, self.voice_path, text, None)

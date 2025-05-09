@@ -70,19 +70,28 @@ WebUI的配置位于`webui/config/config.json`，支持以下设置：
 
 ```
 webui/
-├── app.py                 # 应用入口点
-├── components/            # UI组件模块
-│   ├── audio_player.py    # 音频播放器组件
-│   ├── prompt_selector.py # 提示选择器组件  
-│   └── text_input.py      # 文本输入组件
-├── services/              # 服务层
-│   ├── tts_service.py     # TTS服务接口
-│   └── file_service.py    # 文件管理服务
-├── utils/                 # 工具函数
-│   ├── audio_utils.py     # 音频处理工具
-│   └── config_utils.py    # 配置工具
-└── config/                # 配置文件
-    └── settings.py        # 应用设置
+├── app.py                   # 应用入口点
+├── components/              # UI组件模块
+│   ├── audio_player.py      # 音频播放器组件
+│   ├── prompt_selector.py   # 提示选择器组件  
+│   ├── text_input.py        # 文本输入组件
+│   └── log_display.py       # 日志显示组件
+├── models/                  # 业务模型
+│   └── character_manager.py # 角色管理器
+├── services/                # 服务层
+│   ├── tts_service.py       # TTS服务接口
+│   ├── file_service.py      # 文件管理服务
+│   └── enhanced_tts_service.py # 增强TTS服务
+├── utils/                   # 工具函数
+│   ├── audio_utils.py       # 音频处理工具
+│   ├── text_processor.py    # 文本处理工具
+│   └── config_utils.py      # 配置工具
+├── ui/                      # UI构建
+│   ├── main_ui.py           # 主界面构建
+│   └── event_handlers.py    # 事件处理器
+└── config/                  # 配置文件
+    ├── settings.py          # 应用设置
+    └── text_replace_config.txt # 文本替换规则
 ```
 
 ## 高级功能

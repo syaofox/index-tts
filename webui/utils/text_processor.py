@@ -34,10 +34,9 @@ class TextProcessor:
             
         # 应用替换规则（如果有）
         if replace_rules:
-            for pattern, condition, replacement in replace_rules:
-                if condition in text:
-                    text = text.replace(pattern, replacement)
-        
+            print(f"应用替换规则: {replace_rules}")
+            text = TextProcessor.apply_replace_rules(text, replace_rules)
+            
         # 将文本按行分割
         lines = text.split('\n')
         segments = []

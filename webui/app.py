@@ -18,14 +18,14 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(current_dir)
 
 # 确保必要的目录存在
-for dir_path in ["prompts", "outputs", "webui/text_replace_config.txt"]:
+for dir_path in ["prompts", "outputs", "webui/config/text_replace_config.txt"]:
     if dir_path.endswith(".txt"):
         # 确保文件所在目录存在
         os.makedirs(os.path.dirname(dir_path), exist_ok=True)
         # 如果文件不存在且是配置文件，复制从ui目录
-        if not os.path.exists(dir_path) and os.path.exists(dir_path.replace("webui/", "ui/")):
+        if not os.path.exists(dir_path) and os.path.exists(dir_path.replace("webui/config/", "ui/")):
             import shutil
-            shutil.copy2(dir_path.replace("webui/", "ui/"), dir_path)
+            shutil.copy2(dir_path.replace("webui/config/", "ui/"), dir_path)
     else:
         os.makedirs(dir_path, exist_ok=True)
 
@@ -51,7 +51,7 @@ from webui.ui.main_ui import MainUI
 from webui.ui.event_handlers import EventHandlers
 
 # 导入角色管理
-from ui.models.character_manager import CharacterManager
+from webui.models.character_manager import CharacterManager
 
 
 def main():

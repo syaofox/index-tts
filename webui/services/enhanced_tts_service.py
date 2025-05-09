@@ -14,7 +14,7 @@ import numpy as np
 import traceback
 
 # 统一使用相对导入路径
-from webui.utils.character_manager import CharacterManager
+from webui.models.character_manager import CharacterManager
 from webui.utils.text_processor import TextProcessor
 from webui.utils.audio_utils import AudioUtils
 
@@ -32,7 +32,7 @@ class EnhancedTTSService:
         self.tts_service = tts_service
         
         # 从配置文件加载文本替换规则 - 使用固定的相对路径
-        config_path = os.path.join("webui", "text_replace_config.txt")
+        config_path = os.path.join("webui", "config", "text_replace_config.txt")
         
         self.replace_rules = self.load_replace_rules(config_path)
         
