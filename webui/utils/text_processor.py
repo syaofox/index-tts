@@ -17,7 +17,7 @@ class TextProcessor:
     BR_TAG = "[BR]"
     
     @staticmethod
-    def preprocess_text(text, punct_chars="。？！.!?;；：:", replace_rules=None):
+    def preprocess_text(text, punct_chars="。？！.!?;；", replace_rules=None):
         """
         预处理文本，根据标点符号分割成段落
         
@@ -39,7 +39,7 @@ class TextProcessor:
                     text = text.replace(pattern, replacement)
         
         # 将文本按行分割
-        lines = text.strip().split('\n')
+        lines = text.split('\n')
         segments = []
         
         # 处理每一行，保留空行逻辑
