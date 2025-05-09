@@ -539,58 +539,5 @@ class EnhancedTTSService:
         except Exception as e:
             self.log(f"合并多角色音频出错: {e}")
             import traceback
-            traceback.print_exc()
-            
-            # 如果合并失败，尝试返回第一个成功生成的角色音频
-            if role_audio_segments:
-                self.log("尝试使用第一个角色的音频作为备选输出")
-                try:
-                    role_name, wave_data, sr = role_audio_segments[0]
-                    fallback_output = output_path.replace(".wav", "_fallback.wav")
-                    
-                    # 确保数据格式正确
-                    if isinstance(wave_data, np.ndarray):
-                        tensor_data = torch.tensor(wave_data, dtype=torch.float32)
-                        if tensor_data.dim() == 1:
-                            tensor_data = tensor_data.unsqueeze(0)
-                        elif tensor_data.dim() == 3:
-                            tensor_data = tensor_data[0]  # 取第一个维度
-                        
-                        # 检查并修正张量维度顺序
-                        if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
-                            self.log(f"警告: 备选输出检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
-                            tensor_data = tensor_data.transpose(0, 1)
-                    elif isinstance(wave_data, torch.Tensor):
-                        tensor_data = wave_data.float()
-                        if tensor_data.dim() == 1:
-                            tensor_data = tensor_data.unsqueeze(0)
-                        elif tensor_data.dim() == 3:
-                            tensor_data = tensor_data[0]  # 取第一个维度
-                        
-                        # 检查并修正张量维度顺序
-                        if tensor_data.shape[0] > 10:  # 通常通道数不会超过10
-                            self.log(f"警告: 备选输出检测到张量维度可能颠倒，尝试转置 - 原始形状: {tensor_data.shape}")
-                            tensor_data = tensor_data.transpose(0, 1)
-                    else:
-                        raise ValueError(f"不支持的数据类型: {type(wave_data)}")
-                    
-                    # 确保tensor是2D的且通道数合理
-                    if tensor_data.shape[0] > 2:
-                        self.log(f"警告: 备选输出通道数 {tensor_data.shape[0]} 异常大，重置为单通道")
-                        # 如果通道数异常大，可能是颠倒的，取第一列作为单通道
-                        tensor_data = tensor_data[:1]
-                    
-                    self.log(f"备选输出音频的形状: {tensor_data.shape}")
-                    
-                    # 转换为int16并保存
-                    tensor_data_int16 = tensor_data.to(torch.int16)
-                    torchaudio.save(fallback_output, tensor_data_int16, sr)
-                    self.log(f"已生成备选输出: {fallback_output}")
-                    return fallback_output
-                except Exception as e:
-                    self.log(f"生成备选输出失败: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    pass
-            
+            traceback.print_exc()            
             return None 
