@@ -9,6 +9,7 @@ import os
 import torch
 import torchaudio
 import time
+import re
 
 # 导入相关模块
 from webui.utils.character_manager import CharacterManager
@@ -34,6 +35,9 @@ class EnhancedTTSService:
         
         # 日志回调函数，默认为打印到控制台
         self.log_callback = print
+        
+        # 角色管理器
+        self.character_manager = CharacterManager("prompts")
         
     def set_log_callback(self, callback_func):
         """
@@ -92,51 +96,113 @@ class EnhancedTTSService:
             str: 生成的音频文件路径
         """
         try:
-            # 检查是否是多角色文本
-            role_text_pairs = TextProcessor.parse_multi_role_text(text)
-            
-            if len(role_text_pairs) > 1:
-                self.log(f"检测到多角色文本，共 {len(role_text_pairs)} 个角色")
-                return self.generate_multi_role(role_text_pairs, output_path, mode, punct_chars, pause_time)
-            else:
-                # 单角色处理，取出文本内容
-                _, content = role_text_pairs[0]
-                self.log(f"单角色处理，文本长度: {len(content)} 字符")
+            # 检查文本是否为空
+            if not text or not text.strip():
+                self.log("错误: 输入文本为空")
+                return None
                 
-                # 自定义文件名（如果未提供有效的路径或是默认路径）
-                if not output_path or output_path.endswith("output.wav"):
-                    # 从提示音频路径中提取角色名（如果可能）
-                    prompt_filename = os.path.basename(prompt_path)
-                    full_name = os.path.splitext(prompt_filename)[0]
-                    
-                    # 提取第一个下划线之前的内容作为角色名
-                    if "_" in full_name:
-                        speaker_name = full_name.split("_", 1)[0]
-                    else:
-                        speaker_name = full_name
-                    
-                    # 清理文本内容（取前50个字符）
-                    text_sample = content.strip().replace("\n", "").replace("\r", "").replace(" ", "")
-                    # 替换Windows文件名中的非法字符
-                    for char in '\\/:"*?<>|':
-                        text_sample = text_sample.replace(char, "_")
-                    text_sample = text_sample[:50]  # 限制长度
-                    
-                    # 添加时间戳
-                    timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-                    output_filename = f"[{speaker_name}][{timestamp}]{text_sample}"
-                    output_path = os.path.join("outputs", f"{output_filename}.wav")
-                    
-                    # 确保输出目录存在
-                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-                    self.log(f"已生成自定义输出文件名: {output_path}")
+            # 检查提示音频是否为空
+            if not prompt_path:
+                self.log("警告: 未提供提示音频，尝试检测多角色文本")
+                # 尝试解析文本为多角色对话
+                is_multi_character, character_text_segments = self._parse_multi_role_text(text)
                 
-                return self.generate_with_segments(prompt_path, content, output_path, mode, punct_chars, pause_time)
+                if is_multi_character:
+                    self.log(f"检测到多角色文本，共 {len(character_text_segments)} 个角色")
+                    return self.generate_multi_role_from_segments(character_text_segments, output_path, mode, punct_chars, pause_time)
+                else:
+                    self.log("错误: 未提供提示音频且无法检测到多角色对话")
+                    return None
+                    
+            # 自定义文件名（如果未提供有效的路径或是默认路径）
+            if not output_path or output_path.endswith("output.wav"):
+                output_path = self._generate_output_filename(prompt_path, text, False)
+                
+            # 生成单角色语音
+            return self.generate_with_segments(prompt_path, text, output_path, mode, punct_chars, pause_time)
+                
         except Exception as e:
             self.log(f"生成语音出错: {e}")
             import traceback
             traceback.print_exc()
             return None
+    
+    def _parse_multi_role_text(self, text):
+        """
+        解析文本，确定是单人还是多人推理，并按角色分割文本
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            tuple: (是否多人推理, 角色文本分段列表)
+        """
+        # 使用 TextProcessor 的通用方法解析多角色文本
+        # 此方法只支持 <角色名> 格式的多角色对话
+        return TextProcessor.parse_multi_role_text(text)
+    
+    def _generate_output_filename(self, prompt_path, text, is_multi_role=False, role_text_pairs=None):
+        """
+        生成输出文件名
+        
+        Args:
+            prompt_path: 提示音频文件路径
+            text: 输入文本
+            is_multi_role: 是否为多角色生成
+            role_text_pairs: 角色文本对，仅在is_multi_role为True时使用
+            
+        Returns:
+            str: 生成的输出文件路径
+        """
+        try:
+            # 为多角色生成专门的文件名
+            if is_multi_role and role_text_pairs:
+                # 使用第一个角色名和总角色数
+                first_role = role_text_pairs[0][0]
+                combined_name = f"{first_role}"
+                if len(role_text_pairs) > 1:
+                    combined_name += f"等{len(role_text_pairs)}人对话"
+                
+                # 添加时间戳
+                timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+                output_filename = f"[多角色][{timestamp}]{combined_name}"
+                output_path = os.path.join("outputs", f"{output_filename}.wav")
+                
+            else:
+                # 单角色生成
+                # 从提示音频路径中提取角色名（如果可能）
+                prompt_filename = os.path.basename(prompt_path)
+                full_name = os.path.splitext(prompt_filename)[0]
+                
+                # 提取第一个下划线之前的内容作为角色名
+                if "_" in full_name:
+                    speaker_name = full_name.split("_", 1)[0]
+                else:
+                    speaker_name = full_name
+                
+                # 清理文本内容（取前50个字符）
+                text_sample = text.strip().replace("\n", "").replace("\r", "").replace(" ", "")
+                # 替换Windows文件名中的非法字符
+                for char in '\\/:"*?<>|':
+                    text_sample = text_sample.replace(char, "_")
+                text_sample = text_sample[:50]  # 限制长度
+                
+                # 添加时间戳
+                timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+                output_filename = f"[{speaker_name}][{timestamp}]{text_sample}"
+                output_path = os.path.join("outputs", f"{output_filename}.wav")
+            
+            # 确保输出目录存在
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            self.log(f"已生成自定义输出文件名: {output_path}")
+            
+            return output_path
+            
+        except Exception as e:
+            self.log(f"生成输出文件名出错: {e}")
+            # 返回一个默认的输出路径
+            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
+            return os.path.join("outputs", f"audio_{timestamp}.wav")
     
     def generate_with_segments(self, prompt_path, text, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
         """
@@ -209,12 +275,12 @@ class EnhancedTTSService:
         # 合并所有音频文件，包括添加停顿
         return self.merge_audio_with_pauses(temp_files, segments, output_path, pause_time)
     
-    def generate_multi_role(self, role_text_pairs, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
+    def generate_multi_role_from_segments(self, character_text_segments, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
         """
-        处理多角色文本
+        根据角色文本分段生成多角色对话音频
         
         Args:
-            role_text_pairs: [(角色名, 文本内容), ...] 格式的列表
+            character_text_segments: [(角色名, 文本内容), ...] 格式的列表
             output_path: 输出音频文件路径
             mode: 推理模式，"normal"或"fast"
             punct_chars: 分割标点符号
@@ -223,43 +289,37 @@ class EnhancedTTSService:
         Returns:
             str: 生成的音频文件路径
         """
-        # 需要角色管理器来获取角色音频
-        character_manager = CharacterManager("prompts")
+        # 检查文本分段是否有效
+        if not character_text_segments:
+            self.log("错误: 没有有效的角色文本分段")
+            return None
         
         # 生成自定义的输出文件名，使用角色名和时间戳
         if not output_path or output_path.endswith("output.wav"):
-            # 使用第一个角色名和总角色数
-            first_role = role_text_pairs[0][0]
-            combined_name = f"{first_role}"
-            if len(role_text_pairs) > 1:
-                combined_name += f"等{len(role_text_pairs)}人对话"
-            
-            # 添加时间戳
-            timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-            output_filename = f"[多角色][{timestamp}]{combined_name}"
-            output_path = os.path.join("outputs", f"{output_filename}.wav")
-            
-            # 确保输出目录存在
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            self.log(f"已生成自定义输出文件名: {output_path}")
+            output_path = self._generate_output_filename(None, "", True, character_text_segments)
         
         role_audio_files = []
         
-        self.log(f"开始处理 {len(role_text_pairs)} 个角色的文本")
+        self.log(f"开始处理 {len(character_text_segments)} 个角色的文本")
         
         # 记录找不到的角色
         missing_characters = []
         
-        for i, (role_name, text) in enumerate(role_text_pairs):
-            self.log(f"处理角色 {i+1}/{len(role_text_pairs)}: {role_name}")
+        for i, (role_name, text) in enumerate(character_text_segments):
+            self.log(f"处理角色 {i+1}/{len(character_text_segments)}: {role_name or '未知角色'}")
             
             # 角色的文本为空，跳过
-            if not text.strip():
-                self.log(f"警告: 角色 '{role_name}' 的文本为空，跳过处理")
+            if not text or not text.strip():
+                self.log(f"警告: 角色 '{role_name or '未知角色'}' 的文本为空，跳过处理")
+                continue
+            
+            # 如果没有角色名，使用默认提示音频（不支持）
+            if not role_name:
+                self.log(f"警告: 段落 {i+1} 没有角色名，无法处理")
                 continue
                 
             # 加载角色数据
-            character_data = character_manager.load_character(role_name)
+            character_data = self.character_manager.load_character(role_name)
             
             if not character_data or "voice_path" not in character_data:
                 self.log(f"警告: 无法加载角色 '{role_name}'，跳过处理")
@@ -273,7 +333,7 @@ class EnhancedTTSService:
                     continue
             
             # 为当前角色生成临时输出文件
-            role_output_path = os.path.join(self.temp_dir, f"{role_name}_{i}.wav")
+            role_output_path = os.path.join(self.temp_dir, f"{role_name}_{i}_{int(time.time())}.wav")
             
             # 生成当前角色的语音
             try:
@@ -296,10 +356,10 @@ class EnhancedTTSService:
             return None
         
         # 报告处理结果
-        self.log(f"成功生成 {len(role_audio_files)}/{len(role_text_pairs)} 个角色的语音，准备合并")
+        self.log(f"成功生成 {len(role_audio_files)}/{len(character_text_segments)} 个角色的语音，准备合并")
         
         # 合并所有角色的音频
-        return self.merge_audio_files(role_audio_files, output_path)
+        return self.merge_audio_files(role_audio_files, output_path)     
     
     def merge_audio_with_pauses(self, audio_files, segments, output_path, pause_time=0.2):
         """

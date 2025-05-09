@@ -11,6 +11,7 @@ import gradio as gr
 import threading
 import queue
 import shutil
+import re
 
 
 class EventHandlers:
@@ -95,8 +96,8 @@ class EventHandlers:
         self.enqueue_log("开始生成语音...")
         yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
-        if not prompt_path or not text:
-            self.enqueue_log("错误: 提示音频或文本为空")
+        if not text:
+            self.enqueue_log("错误: 文本为空")
             self.is_processing = False
             yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
             return
@@ -111,44 +112,17 @@ class EventHandlers:
         self.enqueue_log(f"停顿时间: {pause_time_input}秒")
         yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
-        # 如果prompt_path不是直接可用的音频文件，尝试查找对应角色的音频文件
-        if isinstance(prompt_path, str) and not os.path.exists(prompt_path):
-            try:
-                # 尝试提取角色名（如果是格式化的角色文件名）
-                basename = os.path.basename(prompt_path)
-                parts = basename.split("_", 1)
-                if len(parts) > 1:
-                    character_name = parts[0]
-                else:
-                    character_name = os.path.splitext(basename)[0]
-                
-                self.enqueue_log(f"正在查找角色 '{character_name}' 的音频文件")
-                yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
-                
-                # 使用文件服务查找角色音频文件
-                prompt_path = self.file_service.get_prompt_path(character_name)
-                
-                if not os.path.exists(prompt_path) or prompt_path.endswith("_not_found"):
-                    self.enqueue_log(f"无法找到角色 '{character_name}' 的音频文件")
-                    self.is_processing = False
-                    yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
-                    return
-                else:
-                    self.enqueue_log(f"已找到角色音频: {prompt_path}")
-                    yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
-            except Exception as e:
-                self.enqueue_log(f"处理提示文件路径时出错: {e}")
-                self.is_processing = False
-                yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
-                return
-        
-        # 使用"output.wav"作为输出路径，让enhanced_tts_service.py中的自定义命名逻辑生效
-        output_path = os.path.join(self.settings.outputs_dir, "output.wav")
+        # 解析文本，确定是单人还是多人推理
+        is_multi_character, character_text_segments = self._parse_text(text)
+        self.enqueue_log(f"推理类型: {'多人对话' if is_multi_character else '单人语音'}")
+        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
         # 创建后台线程来生成音频，这样可以在生成过程中更新日志
+        output_path = os.path.join(self.settings.outputs_dir, "output.wav")
+        
         generation_thread = threading.Thread(
             target=self._run_generation,
-            args=(prompt_path, text, output_path, mode, punct_chars_input, pause_time_input)
+            args=(prompt_path, text, output_path, mode, punct_chars_input, pause_time_input, is_multi_character, character_text_segments)
         )
         generation_thread.daemon = True
         generation_thread.start()
@@ -177,8 +151,53 @@ class EventHandlers:
         
         # 生成完成后，返回最终结果
         yield gr.update(value=self.result, visible=True), self.logs
+    
+    def _parse_text(self, text):
+        """
+        解析文本，确定是单人还是多人推理，并按角色分割文本
         
-    def _run_generation(self, prompt_path, text, output_path, mode, punct_chars, pause_time):
+        Args:
+            text: 输入文本
+            
+        Returns:
+            tuple: (是否多人推理, 角色文本分段列表)
+        """
+        # 使用 TextProcessor 的通用方法解析多角色文本
+        # 此方法只支持 <角色名> 格式的多角色对话
+        from webui.utils.text_processor import TextProcessor
+        return TextProcessor.parse_multi_role_text(text)
+    
+    def _find_character_prompt(self, character_name):
+        """
+        根据角色名查找对应的提示音频文件路径
+        
+        Args:
+            character_name: 角色名称
+            
+        Returns:
+            str: 提示音频文件路径，如果找不到则返回None
+        """
+        if not character_name:
+            return None
+        
+        try:
+            # 尝试加载角色信息
+            character_data = self.character_manager.load_character(character_name)
+            
+            if character_data and "voice_path" in character_data:
+                # 返回角色音频文件路径
+                return character_data["voice_path"]
+            else:
+                # 如果字符数据提取失败，尝试直接使用文件服务获取音频路径
+                prompt_file = self.file_service.get_prompt_path(character_name)
+                if os.path.exists(prompt_file) and not prompt_file.endswith("_not_found"):
+                    return prompt_file
+        except Exception as e:
+            self.enqueue_log(f"查找角色 '{character_name}' 的提示音频时出错: {e}")
+        
+        return None
+        
+    def _run_generation(self, prompt_path, text, output_path, mode, punct_chars, pause_time, is_multi_character, character_text_segments):
         """
         在后台线程运行音频生成
         
@@ -189,26 +208,168 @@ class EventHandlers:
             mode: 推理模式
             punct_chars: 分割标点符号
             pause_time: 停顿时间(秒)
+            is_multi_character: 是否多人推理
+            character_text_segments: 角色文本分段列表
         """
         try:
-            # 使用增强的TTS服务生成音频
-            self.result = self.enhanced_tts_service.generate(
-                prompt_path, text, output_path, 
-                "normal" if mode == "普通推理" else "fast", 
-                punct_chars, 
-                pause_time
-            )
-            
-            if self.result:
-                self.enqueue_log(f"语音生成完成: {self.result}")
+            if not is_multi_character:
+                # 单人推理
+                self._generate_single_character_audio(prompt_path, text, output_path, mode, punct_chars, pause_time)
             else:
-                self.enqueue_log("语音生成失败")
+                # 多人推理
+                self._generate_multi_character_audio(character_text_segments, output_path, mode, punct_chars, pause_time)
+            
         except Exception as e:
             self.enqueue_log(f"生成过程发生错误: {str(e)}")
         finally:
             # 标记处理完成
             self.is_processing = False
+    
+    def _generate_single_character_audio(self, prompt_path, text, output_path, mode, punct_chars, pause_time):
+        """
+        生成单人角色音频
         
+        Args:
+            prompt_path: 提示音频文件路径
+            text: 输入文本
+            output_path: 输出音频文件路径
+            mode: 推理模式
+            punct_chars: 分割标点符号
+            pause_time: 停顿时间(秒)
+        """
+        if not prompt_path:
+            self.enqueue_log("错误: 提示音频为空")
+            return
+        
+        # 检查提示音频文件路径
+        if isinstance(prompt_path, str) and not os.path.exists(prompt_path):
+            try:
+                # 尝试提取角色名（如果是格式化的角色文件名）
+                basename = os.path.basename(prompt_path)
+                parts = basename.split("_", 1)
+                if len(parts) > 1:
+                    character_name = parts[0]
+                else:
+                    character_name = os.path.splitext(basename)[0]
+                
+                self.enqueue_log(f"正在查找角色 '{character_name}' 的音频文件")
+                
+                # 使用文件服务查找角色音频文件
+                prompt_path = self.file_service.get_prompt_path(character_name)
+                
+                if not os.path.exists(prompt_path) or prompt_path.endswith("_not_found"):
+                    self.enqueue_log(f"无法找到角色 '{character_name}' 的音频文件")
+                    return
+                else:
+                    self.enqueue_log(f"已找到角色音频: {prompt_path}")
+            except Exception as e:
+                self.enqueue_log(f"处理提示文件路径时出错: {e}")
+                return
+        
+        # 使用增强的TTS服务生成音频
+        mode_str = "normal" if mode == "普通推理" else "fast"
+        self.result = self.enhanced_tts_service.generate(
+            prompt_path, text, output_path, 
+            mode_str, 
+            punct_chars, 
+            pause_time
+        )
+        
+        if self.result:
+            self.enqueue_log(f"单人语音生成完成: {self.result}")
+        else:
+            self.enqueue_log("单人语音生成失败")
+    
+    def _generate_multi_character_audio(self, character_text_segments, final_output_path, mode, punct_chars, pause_time):
+        """
+        生成多人对话音频
+        
+        Args:
+            character_text_segments: 角色文本分段列表，格式为[(角色名1, 文本1), (角色名2, 文本2), ...]
+            final_output_path: 最终输出音频文件路径
+            mode: 推理模式
+            punct_chars: 分割标点符号
+            pause_time: 停顿时间(秒)
+        """
+        self.enqueue_log(f"多人对话包含 {len(character_text_segments)} 个语音段")
+        
+        # 临时音频文件路径列表
+        temp_audio_files = []
+        mode_str = "normal" if mode == "普通推理" else "fast"
+        
+        # 为每个角色生成单独的音频
+        for idx, (character_name, character_text) in enumerate(character_text_segments):
+            self.enqueue_log(f"处理第 {idx+1}/{len(character_text_segments)} 段对话: {character_name or '未知角色'}")
+            
+            # 如果没有角色名，使用提供的提示音频
+            if not character_name:
+                self.enqueue_log("使用默认提示音频进行生成")
+                continue
+            
+            # 查找角色对应的提示音频
+            prompt_path = self._find_character_prompt(character_name)
+            
+            if not prompt_path:
+                self.enqueue_log(f"无法找到角色 '{character_name}' 的提示音频，跳过该段对话")
+                continue
+            
+            # 生成临时输出文件路径
+            temp_output_path = os.path.join(
+                self.settings.outputs_dir, 
+                f"temp_{character_name}_{idx}_{int(time.time())}.wav"
+            )
+            
+            self.enqueue_log(f"使用角色 '{character_name}' 的提示音频生成语音")
+            
+            # 生成音频
+            result = self.enhanced_tts_service.generate(
+                prompt_path, character_text, temp_output_path,
+                mode_str,
+                punct_chars,
+                pause_time
+            )
+            
+            if result:
+                self.enqueue_log(f"段落 {idx+1} 生成完成: {result}")
+                temp_audio_files.append(result)
+            else:
+                self.enqueue_log(f"段落 {idx+1} 生成失败")
+        
+        if not temp_audio_files:
+            self.enqueue_log("所有段落生成失败，无法合并音频")
+            return
+        
+        # 合并所有临时音频文件
+        self.enqueue_log("开始合并所有角色的语音片段...")
+        
+        try:
+            # 调用音频合并方法（需要在enhanced_tts_service中实现）
+            merged_result = self.enhanced_tts_service.merge_audio_files(
+                temp_audio_files, 
+                final_output_path
+            )
+            
+            if merged_result:
+                self.enqueue_log(f"多人对话音频合并完成: {merged_result}")
+                self.result = merged_result
+            else:
+                self.enqueue_log("多人对话音频合并失败")
+            
+            # 清理临时文件
+            for temp_file in temp_audio_files:
+                try:
+                    if os.path.exists(temp_file):
+                        os.remove(temp_file)
+                except Exception as e:
+                    self.enqueue_log(f"清理临时文件 {temp_file} 时出错: {e}")
+                    
+        except Exception as e:
+            self.enqueue_log(f"合并音频文件时出错: {e}")
+            # 如果合并失败，但至少有一个段落成功，使用第一个成功的段落作为结果
+            if temp_audio_files:
+                self.result = temp_audio_files[0]
+                self.enqueue_log(f"使用第一个段落作为结果: {self.result}")
+    
     def update_prompt_from_dropdown(self, prompt_name):
         """
         当从下拉列表选择提示时，加载相应的音频文件

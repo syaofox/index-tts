@@ -1,5 +1,8 @@
-"""文本处理模型
-提供TTS文本的预处理功能。
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""
+文本处理器模块
+为TTS服务提供文本预处理功能
 """
 
 import re
@@ -8,52 +11,106 @@ from typing import List, Tuple, Optional, Dict, Any
 
 
 class TextProcessor:
-    """文本处理工具类，提供文本预处理方法"""
+    """文本处理器类，提供各种文本预处理功能"""
     
-    # 特殊标记
-    BR_TAG = "<br>"  # 空行标记
+    # 段落分隔标记（空行标记）
+    BR_TAG = "[BR]"
     
-    @classmethod
-    def preprocess_text(cls, text: str, punct_chars: str = "。？！", replace_rules=None) -> List[str]:
+    @staticmethod
+    def preprocess_text(text, punct_chars="。？！.!?;；：:", replace_rules=None):
         """
-        文本预处理，包括：
-        1. 应用文本替换规则（如果有）
-        2. 按段落分割
-        3. 将空行替换为<br>标记
-        4. 对非<br>段落按标点符号分割
+        预处理文本，根据标点符号分割成段落
         
         Args:
-            text (str): 要处理的原始文本
-            punct_chars (str): 分割文本的标点符号，默认为"。？！"
-            replace_rules (list): 替换规则列表，格式为[(search_str, replace_from, replace_to), ...]
+            text: 输入文本
+            punct_chars: 用于分割的标点符号
+            replace_rules: 文本替换规则
             
         Returns:
-            list: 处理后的文本段落列表
+            list: 分割后的文本段落列表
         """
-        # 清除引号
-        text = cls.clean_quotes(text)
-        
-        # 应用文本替换规则
+        if not text:
+            return []
+            
+        # 应用替换规则（如果有）
         if replace_rules:
-            text = cls.apply_replace_rules(text, replace_rules)
+            for pattern, condition, replacement in replace_rules:
+                if condition in text:
+                    text = text.replace(pattern, replacement)
         
-        # 分割段落并处理空行
-        paragraphs = cls.split_text_by_newlines_with_br(text)
-        
-        # 对每个段落，如果不是<br>标记，则按标点分割
+        # 将文本按行分割
+        lines = text.strip().split('\n')
         segments = []
-        for para in paragraphs:
-            if para == cls.BR_TAG:
-                segments.append(para)
-            else:
-                # 对非空且非<br>的段落按标点分割
-                if para.strip():
-                    para_segments = cls.split_text_by_punctuation(para, punct_chars)
-                    segments.extend(para_segments)
         
+        # 处理每一行
+        current_segment = ""
+        
+        for line in lines:
+            line = line.strip()
+            
+            # 空行处理（添加段落分隔标记）
+            if not line:
+                if current_segment:
+                    segments.append(current_segment)
+                    current_segment = ""
+                segments.append(TextProcessor.BR_TAG)
+                continue
+                
+            # 将当前行添加到当前段落
+            if current_segment:
+                current_segment += " "
+            current_segment += line
+            
+            # 检查当前行是否以标点符号结尾
+            if line and line[-1] in punct_chars:
+                segments.append(current_segment)
+                current_segment = ""
+        
+        # 添加最后一个段落（如果有）
+        if current_segment:
+            segments.append(current_segment)
+            
         return segments
+        
+    @staticmethod
+    def parse_multi_role_text(text):
+        """
+        解析文本，确定是单人还是多人推理，并按角色分割文本
+        
+        Args:
+            text: 输入文本
+            
+        Returns:
+            tuple: (是否多人推理, 角色文本分段列表)
+        """
+        if not text:
+            return False, []
+            
+        # 正则表达式匹配角色对话，只使用尖括号格式
+        # 匹配形式：<角色名>\n对话内容
+        pattern = r"<([^>]+)>\s*\n([\s\S]+?)(?=(?:\n<[^>]+>)|$)"
+        
+        matches = re.findall(pattern, text, re.DOTALL)
+        
+        # 处理匹配结果
+        character_text_segments = []
+        
+        for character, content in matches:
+            character = character.strip()
+            content = content.strip()
+            if character and content:
+                character_text_segments.append((character, content))
+        
+        # 如果找到多个角色对话，则为多人推理
+        is_multi_character = len(character_text_segments) > 1
+        
+        # 如果没有找到匹配，则认为是单人推理，整个文本作为内容
+        if not character_text_segments:
+            is_multi_character = False
+            character_text_segments = [(None, text.strip())]
+        
+        return is_multi_character, character_text_segments
 
-    # 清除引号
     @classmethod
     def clean_quotes(cls, text: str) -> str:
         """
@@ -220,67 +277,4 @@ class TextProcessor:
         except Exception as e:
             print(f"加载文本替换配置文件出错: {str(e)}")
             
-        return replace_rules
-
-    @staticmethod
-    def parse_multi_role_text(text: str) -> List[Tuple[Optional[str], str]]:
-        """
-        解析多角色文本
-        
-        格式：
-        <角色名1>
-        角色1的文本内容
-        <角色名2>
-        角色2的文本内容
-        
-        Args:
-            text: 输入的多角色文本
-            
-        Returns:
-            list: 包含(角色名, 文本内容)元组的列表
-        """
-        # 按行分割文本
-        lines = text.split("\n")
-        result = []
-        
-        current_role = None
-        current_text_lines = []
-        
-        # 检查文本是否包含角色标记
-        has_role_marker = False
-        for line in lines:
-            line = line.strip()
-            # 检查是否是角色标记
-            role_match = re.match(r"<([^>]+)>", line)
-            if role_match:
-                has_role_marker = True
-                # 如果当前有角色文本，保存这些文本
-                if current_role is not None and current_text_lines:
-                    role_text = "\n".join(current_text_lines).strip()
-                    if role_text:
-                        result.append((current_role, role_text))
-                
-                # 更新当前角色和文本
-                current_role = role_match.group(1).strip()
-                current_text_lines = []
-            else:
-                # 普通文本行，如果已经有角色定义，则添加到当前文本
-                if current_role is not None:
-                    current_text_lines.append(line)
-                # 如果还没有角色定义，且是实质性内容，则作为无角色文本
-                elif line:
-                    if not current_text_lines:  # 如果之前没有文本
-                        current_role = None
-                    current_text_lines.append(line)
-        
-        # 处理最后一个角色的文本
-        if current_text_lines:
-            role_text = "\n".join(current_text_lines).strip()
-            if role_text:
-                result.append((current_role, role_text))
-        
-        # 如果没有检测到角色标记，并且有文本，将整个文本作为无角色文本
-        if not has_role_marker and lines and any(line.strip() for line in lines):
-            return [(None, text.strip())]
-        
-        return result 
+        return replace_rules 
