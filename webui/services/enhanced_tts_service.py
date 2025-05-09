@@ -34,7 +34,7 @@ class EnhancedTTSService:
         # 从配置文件加载文本替换规则 - 使用固定的相对路径
         config_path = os.path.join("webui", "config", "text_replace_config.txt")
         
-        self.replace_rules = self.load_replace_rules(config_path)
+        self.replace_rules = TextProcessor.load_replace_rules(config_path)
         
         # 日志回调函数，默认为打印到控制台
         self.log_callback = print
@@ -69,27 +69,8 @@ class EnhancedTTSService:
         if self.log_callback is None or self.log_callback == print:
             print(message)
         else:
-            self.log_callback(message)
-        
-    def load_replace_rules(self, config_path):
-        """从配置文件加载文本替换规则"""
-        replace_rules = []
-        try:
-            if os.path.exists(config_path):
-                with open(config_path, "r", encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
-                        # 跳过空行和注释行
-                        if not line or line.startswith('#'):
-                            continue
-                        # 解析规则：查找字符串|需修改字符串|替换后的字符串
-                        parts = line.split('|')
-                        if len(parts) == 3:
-                            replace_rules.append((parts[0], parts[1], parts[2]))
-            return replace_rules
-        except Exception as e:
-            self.log(f"加载替换规则出错: {e}")
-            return []
+            self.log_callback(message)        
+   
     
     def generate(self, prompt_path, text, output_path, mode="normal", punct_chars="。？！.!?;；：:", pause_time=0.2):
         """

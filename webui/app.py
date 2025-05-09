@@ -21,11 +21,7 @@ sys.path.append(current_dir)
 for dir_path in ["prompts", "outputs", "webui/config/text_replace_config.txt"]:
     if dir_path.endswith(".txt"):
         # 确保文件所在目录存在
-        os.makedirs(os.path.dirname(dir_path), exist_ok=True)
-        # 如果文件不存在且是配置文件，复制从ui目录
-        if not os.path.exists(dir_path) and os.path.exists(dir_path.replace("webui/config/", "ui/")):
-            import shutil
-            shutil.copy2(dir_path.replace("webui/config/", "ui/"), dir_path)
+        os.makedirs(os.path.dirname(dir_path), exist_ok=True)        
     else:
         os.makedirs(dir_path, exist_ok=True)
 

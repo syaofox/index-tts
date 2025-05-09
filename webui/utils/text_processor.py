@@ -31,7 +31,10 @@ class TextProcessor:
         """
         if not text:
             return []
-            
+
+        # 清除引号
+        text = TextProcessor.clean_quotes(text)
+
         # 应用替换规则（如果有）
         if replace_rules:
             print(f"应用替换规则: {replace_rules}")
@@ -169,60 +172,7 @@ class TextProcessor:
         
         return segments
     
-    @classmethod
-    def split_text_by_newlines_with_br(cls, text: str) -> List[str]:
-        """
-        按换行符分割文本，并将空行替换为<br>标记
-        
-        Args:
-            text (str): 输入文本
-            
-        Returns:
-            list: 分割后的段落列表，空行被替换为<br>标记
-        """
-        if not text:
-            return []
-            
-        # 分割行
-        lines = text.split('\n')
-        
-        # 处理段落和空行
-        paragraphs = []
-        current_paragraph = []
-        empty_line_count = 0  # 用于跟踪连续空行计数
-        
-        for line in lines:
-            line = line.strip()
-            if line:
-                # 如果之前有空行计数，先处理
-                if empty_line_count > 0:
-                    # 为之前的每个空行添加一个<br>标记
-                    for _ in range(empty_line_count):
-                        paragraphs.append(cls.BR_TAG)
-                    empty_line_count = 0
-                
-                # 非空行，添加到当前段落
-                current_paragraph.append(line)
-            else:
-                # 空行，结束当前段落
-                if current_paragraph:
-                    # 将当前段落合并为一个字符串
-                    paragraphs.append(' '.join(current_paragraph))
-                    current_paragraph = []
-                
-                # 累加空行计数，而不是立即添加<br>标记
-                empty_line_count += 1
-        
-        # 处理文本末尾的空行
-        if empty_line_count > 0:
-            for _ in range(empty_line_count):
-                paragraphs.append(cls.BR_TAG)
-        
-        # 处理最后一个段落
-        if current_paragraph:
-            paragraphs.append(' '.join(current_paragraph))
-        
-        return paragraphs
+    
         
     @classmethod
     def load_replace_rules_from_file(cls, config_path: str) -> List[Tuple[str, str, str]]:
