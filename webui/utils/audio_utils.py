@@ -201,6 +201,7 @@ class AudioUtils:
     def merge_audio_with_silence(audio_segments, silence_positions, pause_time, sample_rate=24000):
         """
         在内存中合并音频数据，并在指定位置插入静音
+        同时在每个音频片段之间也添加静音
         
         Args:
             audio_segments: 音频数据列表，每个元素为元组 (索引, 波形数据)
@@ -254,17 +255,32 @@ class AudioUtils:
             # 准备所有需要合并的片段
             final_segments = []
             segment_indices = set(segment[0] for segment in audio_segments)
+            # 转换为有序列表以便在后续处理中判断片段间关系
+            ordered_segment_indices = sorted(list(segment_indices))
+            
+            # 记录上一个处理的索引，用于判断是否需要添加片段间静音
+            last_processed_index = None
             
             # 顺序处理每个位置
             current_index = 0
             while True:
+                should_add_silence = False
+                
                 # 如果是静音位置，添加静音
                 if current_index in silence_positions:
                     final_segments.append(silence)
-                    print(f"位置 {current_index}: 添加静音")
+                    print(f"位置 {current_index}: 添加指定静音")
+                    last_processed_index = None  # 重置，因为我们已经添加了静音
                 
                 # 如果是音频段位置，添加音频
                 if current_index in segment_indices:
+                    # 检查是否需要添加片段间静音
+                    # 如果上一个处理的是音频段（last_processed_index不为None）
+                    # 并且当前位置不在silence_positions中（之前没有添加静音）
+                    if last_processed_index is not None and current_index not in silence_positions:
+                        final_segments.append(silence)
+                        print(f"位置 {current_index}: 添加片段间静音")
+                    
                     # 找到对应的规范化后的音频数据
                     segment_position = next(i for i, (idx, _) in enumerate(audio_segments) if idx == current_index)
                     if segment_position < len(normalized_segments):
@@ -282,6 +298,9 @@ class AudioUtils:
                         
                         final_segments.append(audio_data)
                         print(f"位置 {current_index}: 添加音频，形状: {audio_data.shape}")
+                        
+                        # 记录当前处理的音频段索引
+                        last_processed_index = current_index
                 
                 # 更新索引
                 current_index += 1
