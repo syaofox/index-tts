@@ -42,34 +42,19 @@ class TextProcessor:
         lines = text.strip().split('\n')
         segments = []
         
-        # 处理每一行
-        current_segment = ""
-        
+        # 处理每一行，保留空行逻辑
         for line in lines:
             line = line.strip()
             
             # 空行处理（添加段落分隔标记）
             if not line:
-                if current_segment:
-                    segments.append(current_segment)
-                    current_segment = ""
                 segments.append(TextProcessor.BR_TAG)
                 continue
-                
-            # 将当前行添加到当前段落
-            if current_segment:
-                current_segment += " "
-            current_segment += line
             
-            # 检查当前行是否以标点符号结尾
-            if line and line[-1] in punct_chars:
-                segments.append(current_segment)
-                current_segment = ""
+            # 使用split_text_by_punctuation方法按标点符号分割当前行
+            line_segments = TextProcessor.split_text_by_punctuation(line, punct_chars)
+            segments.extend(line_segments)
         
-        # 添加最后一个段落（如果有）
-        if current_segment:
-            segments.append(current_segment)
-            
         return segments
         
     @staticmethod
@@ -97,7 +82,6 @@ class TextProcessor:
         
         for character, content in matches:
             character = character.strip()
-            content = content.strip()
             if character and content:
                 character_text_segments.append((character, content))
         
@@ -109,6 +93,7 @@ class TextProcessor:
             is_multi_character = False
             character_text_segments = [(None, text.strip())]
         
+        print(f"解析结果: {is_multi_character}, {character_text_segments}")
         return is_multi_character, character_text_segments
 
     @classmethod
@@ -116,7 +101,7 @@ class TextProcessor:
         """
         清除引号
         """
-        pattern = r'[\"\'“”\*\#]'
+        pattern = r'[\"\'"\"\*\#]'
         return re.sub(pattern, '', text)
        
     @classmethod

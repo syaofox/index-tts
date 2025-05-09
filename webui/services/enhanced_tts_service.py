@@ -119,6 +119,7 @@ class EnhancedTTSService:
                 output_path = self._generate_output_filename(prompt_path, text, False)
                 
             # 生成单角色语音
+            print(f"生成单角色语音: {prompt_path}, {text}, {output_path}, {mode}, {punct_chars}, {pause_time}")
             return self.generate_with_segments(prompt_path, text, output_path, mode, punct_chars, pause_time)
                 
         except Exception as e:
