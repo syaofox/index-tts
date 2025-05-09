@@ -105,7 +105,7 @@ class EnhancedTTSService:
             if not prompt_path:
                 self.log("警告: 未提供提示音频，尝试检测多角色文本")
                 # 尝试解析文本为多角色对话
-                is_multi_character, character_text_segments = self._parse_multi_role_text(text)
+                is_multi_character, character_text_segments = TextProcessor.parse_multi_role_text(text)
                 
                 if is_multi_character:
                     self.log(f"检测到多角色文本，共 {len(character_text_segments)} 个角色")
@@ -126,21 +126,7 @@ class EnhancedTTSService:
             import traceback
             traceback.print_exc()
             return None
-    
-    def _parse_multi_role_text(self, text):
-        """
-        解析文本，确定是单人还是多人推理，并按角色分割文本
-        
-        Args:
-            text: 输入文本
             
-        Returns:
-            tuple: (是否多人推理, 角色文本分段列表)
-        """
-        # 使用 TextProcessor 的通用方法解析多角色文本
-        # 此方法只支持 <角色名> 格式的多角色对话
-        return TextProcessor.parse_multi_role_text(text)
-    
     def _generate_output_filename(self, prompt_path, text, is_multi_role=False, role_text_pairs=None):
         """
         生成输出文件名
