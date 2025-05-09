@@ -36,8 +36,6 @@ class EnhancedTTSService:
             tts_service: 原始TTS服务
         """
         self.tts_service = tts_service
-        self.temp_dir = os.path.join("outputs", "temp")
-        os.makedirs(self.temp_dir, exist_ok=True)
         
         # 从配置文件加载文本替换规则 - 支持多种运行方式
         config_path = "webui/text_replace_config.txt"

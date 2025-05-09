@@ -18,7 +18,7 @@ current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(current_dir)
 
 # 确保必要的目录存在
-for dir_path in ["prompts", "outputs", "outputs/temp", "webui/text_replace_config.txt"]:
+for dir_path in ["prompts", "outputs", "webui/text_replace_config.txt"]:
     if dir_path.endswith(".txt"):
         # 确保文件所在目录存在
         os.makedirs(os.path.dirname(dir_path), exist_ok=True)

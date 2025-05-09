@@ -29,7 +29,6 @@ class FileService:
         """确保必要的目录存在"""
         os.makedirs(self.prompts_dir, exist_ok=True)
         os.makedirs(self.outputs_dir, exist_ok=True)
-        os.makedirs(os.path.join(self.outputs_dir, "tasks"), exist_ok=True)
     
     def get_prompt_files(self, exts: Optional[List[str]] = None) -> List[str]:
         """获取提示模板文件列表
