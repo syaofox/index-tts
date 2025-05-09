@@ -349,22 +349,91 @@ class EnhancedTTSService:
                 self.log(f"警告: 未找到角色 {role_name} 的提示音频，跳过此角色")
                 continue
             
-            # 为此角色生成音频
-            try:
-                # 使用内存模式，不保存临时文件
-                result = self.tts_service.generate(prompt_path, text, None, mode)
+            # 为此角色的文本应用相同的预处理逻辑，与单角色推理保持一致
+            segments = TextProcessor.preprocess_text(text, punct_chars, self.replace_rules)
+            
+            if not segments:
+                self.log(f"警告: 角色 {role_name} 的文本预处理后没有有效的片段，跳过此角色")
+                continue
                 
-                # 验证生成的音频数据有效
-                if isinstance(result, tuple) and len(result) == 2:
-                    sample_rate, wave_data = result
-                    role_audio_segments.append((role_name, wave_data, sample_rate))
-                    self.log(f"角色 {role_name} 的音频生成成功，波形长度: {len(wave_data)}")
-                else:
-                    self.log(f"警告: 角色 {role_name} 的音频生成失败或格式不正确")
-            except Exception as e:
-                self.log(f"处理角色 {role_name} 出错: {e}")
-                import traceback
-                traceback.print_exc()
+            self.log(f"角色 {role_name} 的文本被分割为 {len(segments)} 个片段，其中BR标记 {segments.count(self.BR_TAG)} 个")
+            
+            # 处理角色的每个文本片段并合并
+            role_segment_audios = []  # 用于存储元组 (索引, 波形数据)
+            role_silence_positions = []  # 存储需要插入静音的位置
+            
+            if len(segments) == 1:
+                # 只有一个片段，直接使用原始服务
+                self.log(f"角色 {role_name} 只有一个文本片段，直接进行处理")
+                try:
+                    result = self.tts_service.generate(prompt_path, segments[0], None, mode)
+                    
+                    # 验证生成的音频数据有效
+                    if isinstance(result, tuple) and len(result) == 2:
+                        sample_rate, wave_data = result
+                        role_audio_segments.append((role_name, wave_data, sample_rate))
+                        self.log(f"角色 {role_name} 的音频生成成功，波形长度: {len(wave_data)}")
+                    else:
+                        self.log(f"警告: 角色 {role_name} 的音频生成失败或格式不正确")
+                except Exception as e:
+                    self.log(f"处理角色 {role_name} 出错: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    
+            else:
+                # 有多个片段，逐一处理并在内存中合并
+                for j, segment in enumerate(segments):
+                    if segment == self.BR_TAG:
+                        # 记录需要插入静音的位置
+                        role_silence_positions.append(j)
+                        continue
+                        
+                    if not segment.strip():
+                        # 跳过空片段
+                        continue
+                    
+                    # 打印当前处理的片段
+                    self.log(f"处理角色 {role_name} 的片段 {j+1}/{len(segments)}: {segment[:30]}{'...' if len(segment) > 30 else ''}")
+                    
+                    # 使用原始服务生成当前片段，直接返回音频数据
+                    try:
+                        result = self.tts_service.generate(prompt_path, segment, None, mode)
+                        
+                        # 验证生成的音频数据有效
+                        if isinstance(result, tuple) and len(result) == 2:
+                            sample_rate, wave_data = result
+                            role_segment_audios.append((j, wave_data))
+                            self.log(f"角色 {role_name} 的片段 {j+1} 生成成功，波形长度: {len(wave_data)}")
+                        else:
+                            self.log(f"警告: 角色 {role_name} 的片段 {j+1} 生成失败或格式不正确")
+                    except Exception as e:
+                        self.log(f"处理角色 {role_name} 的片段 {j+1} 出错: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # 检查是否有有效的音频片段
+                if not role_segment_audios:
+                    self.log(f"错误: 角色 {role_name} 没有生成任何有效的音频片段，跳过此角色")
+                    continue
+                
+                # 在内存中合并音频片段，添加静音间隔
+                self.log(f"开始合并角色 {role_name} 的 {len(role_segment_audios)} 个音频片段，添加静音...")
+                
+                # 使用音频处理工具直接合并内存中的音频
+                merged_role_audio, merged_role_sr = AudioUtils.merge_audio_with_silence(
+                    role_segment_audios, 
+                    role_silence_positions, 
+                    pause_time, 
+                    self.default_sample_rate
+                )
+                
+                if merged_role_audio is None:
+                    self.log(f"错误: 合并角色 {role_name} 的音频片段失败，跳过此角色")
+                    continue
+                
+                # 将合并后的角色音频添加到角色音频列表
+                role_audio_segments.append((role_name, merged_role_audio, merged_role_sr))
+                self.log(f"角色 {role_name} 的音频片段合并成功，波形长度: {merged_role_audio.shape[1]}")
         
         # 检查是否有有效的音频片段
         if not role_audio_segments:

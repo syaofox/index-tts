@@ -91,9 +91,8 @@ class TextProcessor:
         # 如果没有找到匹配，则认为是单人推理，整个文本作为内容
         if not character_text_segments:
             is_multi_character = False
-            character_text_segments = [(None, text.strip())]
+            character_text_segments = [(None, text.strip())]        
         
-        print(f"解析结果: {is_multi_character}, {character_text_segments}")
         return is_multi_character, character_text_segments
 
     @classmethod

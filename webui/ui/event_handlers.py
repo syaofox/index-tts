@@ -13,6 +13,13 @@ import queue
 import shutil
 import re
 
+# 导入TextProcessor类
+try:
+    from webui.utils.text_processor import TextProcessor
+except ImportError:
+    # 尝试备用导入路径
+    from utils.text_processor import TextProcessor
+
 
 class EventHandlers:
     """事件处理类"""
@@ -113,7 +120,9 @@ class EventHandlers:
         yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
         # 解析文本，确定是单人还是多人推理
-        is_multi_character, character_text_segments = self._parse_text(text)
+        is_multi_character, character_text_segments = TextProcessor.parse_multi_role_text(text)
+        print(f"解析结果: {is_multi_character}, {character_text_segments}")
+        
         self.enqueue_log(f"推理类型: {'多人对话' if is_multi_character else '单人语音'}")
         yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
@@ -152,20 +161,7 @@ class EventHandlers:
         # 生成完成后，返回最终结果
         yield gr.update(value=self.result, visible=True), self.logs
     
-    def _parse_text(self, text):
-        """
-        解析文本，确定是单人还是多人推理，并按角色分割文本
-        
-        Args:
-            text: 输入文本
-            
-        Returns:
-            tuple: (是否多人推理, 角色文本分段列表)
-        """
-        # 使用 TextProcessor 的通用方法解析多角色文本
-        # 此方法只支持 <角色名> 格式的多角色对话
-        from webui.utils.text_processor import TextProcessor
-        return TextProcessor.parse_multi_role_text(text)
+    
     
     def _find_character_prompt(self, character_name):
         """
@@ -295,7 +291,6 @@ class EventHandlers:
         
         mode_str = "normal" if mode == "普通推理" else "fast"
         
-        # 直接使用enhanced_tts_service的generate_multi_role_from_segments方法
         self.enqueue_log(f"开始生成多角色语音，使用模式: {mode_str}，标点符号: '{punct_chars}'，停顿时间: {pause_time}秒")
         
         try:
