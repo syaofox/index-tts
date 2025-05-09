@@ -303,7 +303,7 @@ class EventHandlers:
             
             # 如果没有角色名，使用提供的提示音频
             if not character_name:
-                self.enqueue_log("使用默认提示音频进行生成")
+                self.enqueue_log("无法处理无角色名的文本段落，跳过处理")
                 continue
             
             # 查找角色对应的提示音频
@@ -320,6 +320,7 @@ class EventHandlers:
             )
             
             self.enqueue_log(f"使用角色 '{character_name}' 的提示音频生成语音")
+            self.enqueue_log(f"应用文本处理：使用标点符号 '{punct_chars}' 分割，停顿时间 {pause_time}秒")
             
             # 生成音频
             result = self.enhanced_tts_service.generate(
@@ -343,7 +344,7 @@ class EventHandlers:
         self.enqueue_log("开始合并所有角色的语音片段...")
         
         try:
-            # 调用音频合并方法（需要在enhanced_tts_service中实现）
+            # 调用音频合并方法
             merged_result = self.enhanced_tts_service.merge_audio_files(
                 temp_audio_files, 
                 final_output_path

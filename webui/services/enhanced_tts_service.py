@@ -299,6 +299,7 @@ class EnhancedTTSService:
             output_path = self._generate_output_filename(None, "", True, character_text_segments)
         
         role_audio_files = []
+        mode_str = "normal" if mode == "普通推理" else "fast"
         
         self.log(f"开始处理 {len(character_text_segments)} 个角色的文本")
         
@@ -337,7 +338,17 @@ class EnhancedTTSService:
             
             # 生成当前角色的语音
             try:
-                role_audio = self.generate_with_segments(prompt_path, text, role_output_path, mode, punct_chars, pause_time)
+                self.log(f"为角色 '{role_name}' 生成语音，使用标点符号 '{punct_chars}' 进行分割，停顿时间 {pause_time}秒")
+                
+                # 使用generate_with_segments方法处理这个角色的文本，确保应用标点分割和停顿处理
+                role_audio = self.generate_with_segments(
+                    prompt_path,
+                    text,
+                    role_output_path,
+                    mode_str,
+                    punct_chars,
+                    pause_time
+                )
                 
                 if role_audio and os.path.exists(role_audio):
                     role_audio_files.append(role_audio)
@@ -346,6 +357,8 @@ class EnhancedTTSService:
                     self.log(f"警告: 角色 '{role_name}' 的语音生成失败")
             except Exception as e:
                 self.log(f"生成角色 '{role_name}' 的语音出错: {e}")
+                import traceback
+                traceback.print_exc()
         
         # 检查是否有成功生成的角色语音
         if not role_audio_files:
@@ -359,7 +372,8 @@ class EnhancedTTSService:
         self.log(f"成功生成 {len(role_audio_files)}/{len(character_text_segments)} 个角色的语音，准备合并")
         
         # 合并所有角色的音频
-        return self.merge_audio_files(role_audio_files, output_path)     
+        self.log("合并所有角色的语音片段")
+        return self.merge_audio_files(role_audio_files, output_path)
     
     def merge_audio_with_pauses(self, audio_files, segments, output_path, pause_time=0.2):
         """
