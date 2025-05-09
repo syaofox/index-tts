@@ -126,8 +126,12 @@ class MainUI:
     
     def _create_main_tab(self):
         """创建主要的音频生成标签页"""
+
         with gr.Row():
-            with gr.Column():
+            with gr.Column(scale=1):
+                text_area = self.text_input.create_text_area(label="请输入目标文本",lines=26)
+
+            with gr.Column(scale=1):
                 prompt_audio = self.audio_player.create_upload_component(label="请上传参考音频")
                 
                 # 预设选择区域调整
@@ -140,30 +144,24 @@ class MainUI:
                     refresh_btn = gr.Button("刷新预设", size="md")
                     delete_btn = gr.Button("删除预设", size="md")
                     # 添加日志显示区域
-                    
-                log_area = self.log_display.create_log_area(label="处理日志")
-                    
-            
-            with gr.Column():
-                text_area = self.text_input.create_text_area(label="请输入目标文本")
-                
-                with gr.Row():
-                    mode_selector = gr.Radio(
-                        choices=["普通推理", "批次推理"], 
-                        label="推理模式",
-                        value="普通推理"
-                    )
-                    
-                with gr.Row():
-                    # 添加文本处理选项
-                    punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
-                    pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
 
-                output_audio = gr.Audio(label="生成结果", visible=True)
+                with gr.Column():   
+                    with gr.Row():
+                        mode_selector = gr.Radio(
+                            choices=["普通推理", "批次推理"], 
+                            label="推理模式",
+                            value="普通推理"
+                        )                        
+                    
+                        # 添加文本处理选项
+                        punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
+                        pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
+            
+                    gen_button = gr.Button("生成语音", variant="primary")    
                 
-                gen_button = gr.Button("生成语音", variant="primary")
+        output_audio = gr.Audio(label="生成结果", visible=True)
         
-        
+        log_area = self.log_display.create_log_area(label="处理日志")
         
         
         

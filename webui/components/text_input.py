@@ -19,7 +19,7 @@ class TextInput:
     def create_text_area(self, 
                         label: str = "输入文本",
                         placeholder: Optional[str] = None,
-                        lines: int = 5) -> gr.TextArea:
+                        lines: int = 22) -> gr.TextArea:
         """创建文本输入区域
         
         Args:
@@ -50,7 +50,7 @@ class TextInput:
             label=label,
             placeholder=placeholder,
             lines=lines,
-            max_lines=20,
+            max_lines=lines,
             interactive=True
         )
     

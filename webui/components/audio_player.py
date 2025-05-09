@@ -39,7 +39,7 @@ class AudioPlayer:
             type=type,
             autoplay=False,  # 关闭自动播放以减少内存占用
             show_download_button=True,  # 显示下载按钮让用户保存音频
-            elem_id=f"audio_upload_{label}"  # 添加唯一ID
+            elem_id=f"audio_upload_{label}",  # 添加唯一ID
         )
     
     def create_playback_component(self, 
