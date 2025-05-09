@@ -11,8 +11,8 @@ import torchaudio
 import time
 
 # 导入相关模块
-from ui.models.character_manager import CharacterManager
-from ui.models.text_processor import TextProcessor
+from webui.utils.character_manager import CharacterManager
+from webui.utils.text_processor import TextProcessor
 
 
 class EnhancedTTSService:
