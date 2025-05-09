@@ -293,83 +293,33 @@ class EventHandlers:
         """
         self.enqueue_log(f"多人对话包含 {len(character_text_segments)} 个语音段")
         
-        # 临时音频文件路径列表
-        temp_audio_files = []
         mode_str = "normal" if mode == "普通推理" else "fast"
         
-        # 为每个角色生成单独的音频
-        for idx, (character_name, character_text) in enumerate(character_text_segments):
-            self.enqueue_log(f"处理第 {idx+1}/{len(character_text_segments)} 段对话: {character_name or '未知角色'}")
-            
-            # 如果没有角色名，使用提供的提示音频
-            if not character_name:
-                self.enqueue_log("无法处理无角色名的文本段落，跳过处理")
-                continue
-            
-            # 查找角色对应的提示音频
-            prompt_path = self._find_character_prompt(character_name)
-            
-            if not prompt_path:
-                self.enqueue_log(f"无法找到角色 '{character_name}' 的提示音频，跳过该段对话")
-                continue
-            
-            # 生成临时输出文件路径
-            temp_output_path = os.path.join(
-                self.settings.outputs_dir, 
-                f"temp_{character_name}_{idx}_{int(time.time())}.wav"
-            )
-            
-            self.enqueue_log(f"使用角色 '{character_name}' 的提示音频生成语音")
-            self.enqueue_log(f"应用文本处理：使用标点符号 '{punct_chars}' 分割，停顿时间 {pause_time}秒")
-            
-            # 生成音频
-            result = self.enhanced_tts_service.generate(
-                prompt_path, character_text, temp_output_path,
+        # 直接使用enhanced_tts_service的generate_multi_role_from_segments方法
+        self.enqueue_log(f"开始生成多角色语音，使用模式: {mode_str}，标点符号: '{punct_chars}'，停顿时间: {pause_time}秒")
+        
+        try:
+            # 直接使用增强型TTS服务的多角色生成功能
+            result = self.enhanced_tts_service.generate_multi_role_from_segments(
+                character_text_segments,
+                final_output_path,
                 mode_str,
                 punct_chars,
                 pause_time
             )
             
             if result:
-                self.enqueue_log(f"段落 {idx+1} 生成完成: {result}")
-                temp_audio_files.append(result)
+                self.enqueue_log(f"多人对话音频生成完成: {result}")
+                self.result = result
             else:
-                self.enqueue_log(f"段落 {idx+1} 生成失败")
-        
-        if not temp_audio_files:
-            self.enqueue_log("所有段落生成失败，无法合并音频")
-            return
-        
-        # 合并所有临时音频文件
-        self.enqueue_log("开始合并所有角色的语音片段...")
-        
-        try:
-            # 调用音频合并方法
-            merged_result = self.enhanced_tts_service.merge_audio_files(
-                temp_audio_files, 
-                final_output_path
-            )
-            
-            if merged_result:
-                self.enqueue_log(f"多人对话音频合并完成: {merged_result}")
-                self.result = merged_result
-            else:
-                self.enqueue_log("多人对话音频合并失败")
-            
-            # 清理临时文件
-            for temp_file in temp_audio_files:
-                try:
-                    if os.path.exists(temp_file):
-                        os.remove(temp_file)
-                except Exception as e:
-                    self.enqueue_log(f"清理临时文件 {temp_file} 时出错: {e}")
-                    
+                self.enqueue_log("多人对话音频生成失败")
+                
         except Exception as e:
-            self.enqueue_log(f"合并音频文件时出错: {e}")
-            # 如果合并失败，但至少有一个段落成功，使用第一个成功的段落作为结果
-            if temp_audio_files:
-                self.result = temp_audio_files[0]
-                self.enqueue_log(f"使用第一个段落作为结果: {self.result}")
+            self.enqueue_log(f"生成多角色音频时出错: {e}")
+            import traceback
+            traceback.print_exc()
+            # 如果生成失败，结果为None
+            self.result = None
     
     def update_prompt_from_dropdown(self, prompt_name):
         """

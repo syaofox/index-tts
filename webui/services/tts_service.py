@@ -7,7 +7,8 @@ TTS服务模块
 
 import os
 import time
-from typing import Optional, Union
+import numpy as np
+from typing import Optional, Union, Tuple
 
 
 class TTSService:
@@ -40,27 +41,23 @@ class TTSService:
                 text: str, 
                 output_path: Optional[str] = None,
                 mode: str = "normal",
-                progress = None) -> Union[str, None]:
+                progress = None) -> Union[str, Tuple[int, np.ndarray], None]:
         """生成语音
         
         Args:
             prompt: 提示音频路径或模板
             text: 要转换为语音的文本
-            output_path: 输出音频路径，默认None则自动生成
+            output_path: 输出音频路径，默认None时直接返回音频数据而不保存文件
             mode: 推理模式，"normal"或"fast"
             progress: 进度回调，用于UI显示
         
         Returns:
-            生成的音频路径或None（如果失败）
+            如果output_path不为None：生成的音频文件路径或None（如果失败）
+            如果output_path为None：(采样率, 音频数据)元组或None（如果失败）
         """
         if not self.initialized or not self.tts:
             print("TTS模型未初始化")
             return None
-        
-        # 确保输出路径存在
-        if not output_path:
-            # 使用固定的"output.wav"以便上层服务可以应用自定义命名逻辑
-            output_path = os.path.join("outputs", "output.wav")
         
         # 设置进度回调
         if progress:

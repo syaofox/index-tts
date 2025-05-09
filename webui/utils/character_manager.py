@@ -185,4 +185,34 @@ class CharacterManager:
             return True, character_name
         except Exception as e:
             print(f"导入角色出错: {str(e)}")
-            return False, str(e) 
+            return False, str(e)
+            
+    def find_character_audios(self, character_name):
+        """
+        查找指定角色名的所有音频文件
+        
+        Args:
+            character_name (str): 角色名称
+            
+        Returns:
+            list: 匹配的音频文件路径列表
+        """
+        if not character_name:
+            return []
+            
+        try:
+            # 查找匹配的角色文件（格式为：角色名_*.*)
+            pattern = os.path.join(self.prompt_dir, f"{character_name}_*")
+            matching_files = glob.glob(pattern)
+            
+            # 筛选出音频文件
+            audio_files = []
+            for file_path in matching_files:
+                file_ext = os.path.splitext(file_path)[1].lower()
+                if file_ext in [".wav", ".mp3", ".flac", ".ogg"]:
+                    audio_files.append(file_path)
+            
+            return audio_files
+        except Exception as e:
+            print(f"查找角色音频文件出错: {str(e)}")
+            return [] 
