@@ -121,11 +121,7 @@ class MainUI:
     def _add_header(self):
         """添加页面标题和介绍"""
         gr.HTML('''
-        <h2><center>IndexTTS: 工业级可控且高效的零样本文本转语音系统</h2>
-        <h2><center>(An Industrial-Level Controllable and Efficient Zero-Shot Text-To-Speech System)</h2>
-        <p align="center">
-        <a href='https://arxiv.org/abs/2502.05512'><img src='https://img.shields.io/badge/ArXiv-2502.05512-red'></a>
-        </p>
+        <h2><center>IndexTTS: 工业级可控且高效的零样本文本转语音系统</h2>        
         ''')
     
     def _create_main_tab(self):
@@ -143,6 +139,10 @@ class MainUI:
                     save_btn = gr.Button("保存为预设", size="md")
                     refresh_btn = gr.Button("刷新预设", size="md")
                     delete_btn = gr.Button("删除预设", size="md")
+                    # 添加日志显示区域
+                    
+                log_area = self.log_display.create_log_area(label="处理日志")
+                    
             
             with gr.Column():
                 text_area = self.text_input.create_text_area(label="请输入目标文本")
@@ -158,10 +158,12 @@ class MainUI:
                     # 添加文本处理选项
                     punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
                     pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
+
+                output_audio = gr.Audio(label="生成结果", visible=True)
                 
                 gen_button = gr.Button("生成语音", variant="primary")
         
-        output_audio = gr.Audio(label="生成结果", visible=True)
+        
         
         
         
@@ -177,8 +179,7 @@ class MainUI:
             # 历史音频播放器
             history_audio = gr.Audio(label="历史音频播放", visible=True)
 
-        # 添加日志显示区域
-        log_area = self.log_display.create_log_area(label="处理日志")
+        
         
         # 返回组件
         return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio

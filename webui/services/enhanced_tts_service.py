@@ -199,12 +199,7 @@ class EnhancedTTSService:
             # 验证生成的音频数据有效
             if isinstance(result, tuple) and len(result) == 2:
                 sample_rate, wave_data = result
-                
-                if role_name:
-                    self.log(f"角色 {role_name} 的音频片段生成成功，波形长度: {len(wave_data)}")
-                else:
-                    self.log(f"音频片段生成成功，波形长度: {len(wave_data)}")
-                    
+
                 return True, sample_rate, wave_data
             else:
                 if role_name:
@@ -294,12 +289,11 @@ class EnhancedTTSService:
             self.log("错误: 合并音频片段失败")
             return None
         
-        # 保存合并后的音频到文件
-        self.log(f"保存合并后的音频到 {output_path}")
+        
         try:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             torchaudio.save(output_path, merged_audio, merged_sr)
-            self.log(f"成功保存音频到 {output_path}")
+            
             return output_path
         except Exception as e:
             return self._handle_exception("保存音频文件出错", e)

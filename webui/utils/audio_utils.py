@@ -326,8 +326,7 @@ class AudioUtils:
                         final_segments[i] = segment[:num_channels]
             
             # 输出最终所有片段的形状，用于调试
-            shapes = [segment.shape for segment in final_segments]
-            print(f"最终合并的片段形状: {shapes}")
+            shapes = [segment.shape for segment in final_segments]            
             
             try:
                 # 使用torch.cat合并所有片段
