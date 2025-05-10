@@ -29,7 +29,7 @@ class LogDisplay:
             value="",
             label=label,
             lines=10,
-            max_lines=15,
+            max_lines=10,
             interactive=False,
             show_copy_button=True
         )

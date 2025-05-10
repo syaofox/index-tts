@@ -10,6 +10,8 @@ import gradio as gr
 
 class MainUI:
     """主界面构建类"""
+
+    theme = gr.themes.Default(spacing_size="sm")
     
     def __init__(self, audio_player, prompt_selector, text_input, log_display):
         """
@@ -43,7 +45,7 @@ class MainUI:
             gr.Blocks: Gradio界面对象
         """
         # 创建Gradio界面
-        demo = gr.Blocks(title="IndexTTS WebUI")
+        demo = gr.Blocks(title="IndexTTS WebUI",theme=self.theme)
         
         with demo:
             self._add_header()
@@ -156,10 +158,11 @@ class MainUI:
                         # 添加文本处理选项
                         punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
                         pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
-            
+                        
+                    output_audio = gr.Audio(label="生成结果", visible=True)
                     gen_button = gr.Button("生成语音", variant="primary")    
                 
-        output_audio = gr.Audio(label="生成结果", visible=True)
+        
         
         log_area = self.log_display.create_log_area(label="处理日志")
         
