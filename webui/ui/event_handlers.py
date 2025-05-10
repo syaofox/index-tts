@@ -91,7 +91,7 @@ class EventHandlers:
             pause_time_input: 停顿时间(秒)
             
         Yields:
-            tuple: (音频更新, 日志更新)
+            tuple: 音频组件更新(含状态日志)
         """
         # 清空日志
         self.logs = ""
@@ -101,30 +101,27 @@ class EventHandlers:
         
         # 输出初始日志
         self.enqueue_log("开始生成语音...")
-        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
+        yield gr.update(value=None, visible=True, label="生成语音: 开始生成语音...")
         
         if not text:
             self.enqueue_log("错误: 文本为空")
             self.is_processing = False
-            yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
+            yield gr.update(value=None, visible=True, label="生成结果: 错误! 文本为空")
             return
         
         # 记录基本参数
         self.enqueue_log(f"推理模式: {mode}")
-        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
+        yield gr.update(value=None, visible=True, label=f"生成语音: 使用{mode}...")
         
         self.enqueue_log(f"分割标点: {punct_chars_input}")
-        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
-        
         self.enqueue_log(f"停顿时间: {pause_time_input}秒")
-        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
         
         # 解析文本，确定是单人还是多人推理
         is_multi_character, character_text_segments = TextProcessor.parse_multi_role_text(text)
         print(f"解析结果: {is_multi_character}, {character_text_segments}")
         
         self.enqueue_log(f"推理类型: {'多人对话' if is_multi_character else '单人语音'}")
-        yield gr.update(value=None, visible=True), self.update_logs(self.log_queue.get())
+        yield gr.update(value=None, visible=True, label=f"生成语音: {'多人对话' if is_multi_character else '单人语音'}处理中...")
         
         # 创建后台线程来生成音频，这样可以在生成过程中更新日志
         output_path = os.path.join(self.settings.outputs_dir, "output.wav")
@@ -141,8 +138,10 @@ class EventHandlers:
             try:
                 # 非阻塞方式获取日志
                 log_message = self.log_queue.get_nowait()
+                # 提取日志中的关键信息用于标签
+                short_log = self._extract_short_log_for_label(log_message)
                 # 更新日志并返回
-                yield gr.update(value=self.result, visible=True), self.update_logs(log_message)
+                yield gr.update(value=self.result, visible=True, label=f"生成语音: {short_log}")
             except queue.Empty:
                 # 如果队列为空且还在处理，等待一段时间
                 if self.is_processing:
@@ -155,14 +154,35 @@ class EventHandlers:
             # 如果生成成功且有结果
             if self.result:
                 self.enqueue_log("生成完成！点击【刷新列表】后，在下拉框中选择音频文件即可播放。")
+                yield gr.update(value=self.result, visible=True, label="生成完成！可在历史音频回放中查看")
+            else:
+                yield gr.update(value=None, visible=True, label="生成失败，请检查日志")
         except Exception as e:
             self.enqueue_log(f"刷新历史音频列表时出错: {e}")
+            yield gr.update(value=self.result, visible=True, label=f"生成完成，但刷新列表出错: {e}")
+    
+    def _extract_short_log_for_label(self, log_message):
+        """
+        从日志消息中提取简短的状态信息，用于显示在标签上
         
-        # 生成完成后，返回最终结果
-        yield gr.update(value=self.result, visible=True), self.logs
-    
-    
-    
+        Args:
+            log_message: 完整的日志消息
+            
+        Returns:
+            str: 简短的状态信息
+        """
+        # 移除时间戳
+        if "]" in log_message:
+            message = log_message.split("]", 1)[1].strip()
+        else:
+            message = log_message
+            
+        # 如果消息太长，截取前面部分
+        if len(message) > 50:
+            message = message[:47] + "..."
+            
+        return message
+        
     def _find_character_prompt(self, character_name):
         """
         根据角色名查找对应的提示音频文件路径
@@ -362,14 +382,14 @@ class EventHandlers:
             current_preset_name: 当前选中的预设名称
             
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新, 音频路径更新)
+            gr.update: 更新后的预设下拉列表
         """
         # 清空之前的日志
         self.logs = ""
         
         if not prompt_audio:
-            self.logs = "错误: 没有有效的参考音频可保存"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
+            self.enqueue_log("错误: 没有有效的参考音频可保存")
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无")
         
         try:
             # 获取当前有效的预设列表
@@ -382,16 +402,16 @@ class EventHandlers:
                 # 生成唯一的预设名，使用时间戳
                 timestamp = time.strftime("%Y%m%d-%H%M%S")
                 save_name = f"{prefix}-{timestamp}"
-                self.logs = f"正在创建新预设 '{save_name}'..."
+                self.enqueue_log(f"正在创建新预设 '{save_name}'...")
             elif current_preset_name not in valid_presets:
                 # 如果输入了自定义名称（不在预设列表中），直接使用它
                 # 替换下划线为连字符，避免影响角色名提取
                 save_name = current_preset_name.replace("_", "-")
-                self.logs = f"正在创建新预设 '{save_name}'..."
+                self.enqueue_log(f"正在创建新预设 '{save_name}'...")
             else:
                 # 如果选择了现有预设，表示要更新预设
                 save_name = current_preset_name
-                self.logs = f"正在更新预设 '{save_name}'..."
+                self.enqueue_log(f"正在更新预设 '{save_name}'...")
             
             # 确保预设目录存在
             os.makedirs(self.settings.prompts_dir, exist_ok=True)
@@ -420,9 +440,9 @@ class EventHandlers:
             
             # 更新日志
             if current_preset_name == "无" or current_preset_name not in valid_presets:
-                self.logs = f"成功创建新预设 '{save_name}'"
+                self.enqueue_log(f"成功创建新预设 '{save_name}'")
             else:
-                self.logs = f"成功更新预设 '{save_name}'"
+                self.enqueue_log(f"成功更新预设 '{save_name}'")
             
             # 刷新预设列表，确保包含新保存的预设
             # 由于文件操作可能需要时间生效，添加一个小延迟
@@ -447,19 +467,19 @@ class EventHandlers:
             # 返回更新后的预设列表，并选择刚保存的预设
             updated_choices = ["无"] + prompt_names
             
-            # 返回三个更新值: 下拉框更新、日志更新、音频控件更新(保持原始音频不变)
-            return gr.update(choices=updated_choices, value=save_name), self.logs, gr.update(value=prompt_audio)
+            # 返回下拉框更新
+            return gr.update(choices=updated_choices, value=save_name)
             
         except Exception as e:
-            self.logs = f"保存预设时出错: {str(e)}"
-            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无"), self.logs, gr.update(value=None)
+            self.enqueue_log(f"保存预设时出错: {str(e)}")
+            return gr.update(choices=["无"] + sorted(self.file_service.get_prompt_names()), value="无")
     
     def refresh_presets(self):
         """
         刷新预设列表
         
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新, 音频更新)
+            gr.update: 更新后的预设下拉列表
         """
         # 清空之前的日志
         self.logs = ""
@@ -475,12 +495,12 @@ class EventHandlers:
             # 刷新预设列表
             prompt_names = sorted(self.file_service.get_prompt_names())
             updated_choices = ["无"] + prompt_names
-            self.logs = f"已刷新预设列表，共 {len(prompt_names)} 个预设"
-            return gr.update(choices=updated_choices, value="无"), self.logs, gr.update(value=None)
+            self.enqueue_log(f"已刷新预设列表，共 {len(prompt_names)} 个预设")
+            return gr.update(choices=updated_choices, value="无")
             
         except Exception as e:
-            self.logs = f"刷新预设列表时出错: {str(e)}"
-            return gr.update(choices=["无"]), self.logs, gr.update(value=None)
+            self.enqueue_log(f"刷新预设列表时出错: {str(e)}")
+            return gr.update(choices=["无"])
     
     def delete_preset(self, preset_name):
         """
@@ -490,10 +510,10 @@ class EventHandlers:
             preset_name: 要删除的预设名称
             
         Returns:
-            tuple: (更新后的预设下拉列表, 日志更新, 音频路径更新)
+            gr.update: 更新后的预设下拉列表
         """
         if not preset_name or preset_name == "无":
-            return gr.update(choices=self.file_service.get_prompt_names(), value="无"), "未选择预设", None
+            return gr.update(choices=self.file_service.get_prompt_names(), value="无")
             
         try:
             # 获取提示音频文件路径
@@ -510,11 +530,14 @@ class EventHandlers:
                 # 获取更新后的预设列表
                 preset_choices = self.file_service.get_prompt_names()
                 
-                return gr.update(choices=preset_choices, value="无"), f"已删除预设: {preset_name}", None
+                self.enqueue_log(f"已删除预设: {preset_name}")
+                return gr.update(choices=preset_choices, value="无")
             else:
-                return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name), f"文件不存在: {audio_path}", None
+                self.enqueue_log(f"文件不存在: {audio_path}")
+                return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name)
         except Exception as e:
-            return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name), f"删除预设出错: {e}", None
+            self.enqueue_log(f"删除预设出错: {e}")
+            return gr.update(choices=self.file_service.get_prompt_names(), value=preset_name)
             
     def get_history_audio_files(self):
         """
@@ -543,11 +566,11 @@ class EventHandlers:
             selected_file_name: 选定的音频文件名
             
         Returns:
-            音频组件更新和日志更新
+            音频组件更新
         """
         if not selected_file_name:
             # 下拉框可能被清空或未选择文件时，不显示提示信息，直接返回空
-            return None, self.logs
+            return None
             
         try:
             # 获取所有历史音频文件
@@ -561,20 +584,20 @@ class EventHandlers:
             self.enqueue_log(f"正在播放历史音频: {selected_file_name}")
             
             # 返回音频更新
-            return file_path, self.update_logs(f"正在播放历史音频: {selected_file_name}")
+            return file_path
         except ValueError:
             self.enqueue_log(f"找不到文件: {selected_file_name}")
-            return None, self.update_logs(f"找不到文件: {selected_file_name}")
+            return None
         except Exception as e:
             self.enqueue_log(f"播放历史音频时出错: {e}")
-            return None, self.update_logs(f"播放历史音频时出错: {e}")
+            return None
             
     def refresh_history_files(self):
         """
         刷新历史音频文件列表
         
         Returns:
-            tuple: 更新后的下拉框选项和日志更新
+            gr.update: 更新后的下拉框选项
         """
         try:
             # 获取最新的历史音频文件
@@ -583,7 +606,7 @@ class EventHandlers:
             # 记录日志
             self.enqueue_log(f"已刷新历史音频列表，共 {len(file_names)} 个文件")
             
-            return gr.update(choices=file_names, value=None), self.update_logs(f"已刷新历史音频列表，共 {len(file_names)} 个文件")
+            return gr.update(choices=file_names, value=None)
         except Exception as e:
             self.enqueue_log(f"刷新历史音频列表时出错: {e}")
-            return gr.update(choices=[], value=None), self.update_logs(f"刷新历史音频列表时出错: {e}") 
+            return gr.update(choices=[], value=None) 

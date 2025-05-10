@@ -52,7 +52,7 @@ class MainUI:
             
             with gr.Tab("音频生成"):
                 # 布局组件
-                prompt_audio, prompt_dropdown, _, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio = self._create_main_tab()
+                prompt_audio, prompt_dropdown, _, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, history_dropdown, refresh_history_btn, history_audio = self._create_main_tab()
                 
              
                 
@@ -60,7 +60,7 @@ class MainUI:
                 gen_button.click(
                     fn=generate_callback,
                     inputs=[prompt_audio, text_area, mode_selector, punct_chars, pause_time],
-                    outputs=[output_audio, log_area],
+                    outputs=[output_audio],
                     show_progress="minimal"  # 显示最小的进度指示
                 )
                 
@@ -75,21 +75,21 @@ class MainUI:
                     save_btn.click(
                         fn=save_preset_callback,
                         inputs=[prompt_audio, prompt_dropdown],
-                        outputs=[prompt_dropdown, log_area, prompt_audio]  # 添加prompt_audio作为输出参数
+                        outputs=[prompt_dropdown]  # 移除prompt_audio作为输出参数
                     )
                 
                 if refresh_presets_callback:
                     refresh_btn.click(
                         fn=refresh_presets_callback,
                         inputs=[],
-                        outputs=[prompt_dropdown, log_area, prompt_audio]  # 添加prompt_audio作为输出参数
+                        outputs=[prompt_dropdown]  # 移除prompt_audio作为输出参数
                     )
                 
                 if delete_preset_callback:
                     delete_btn.click(
                         fn=delete_preset_callback,
                         inputs=[prompt_dropdown],
-                        outputs=[prompt_dropdown, log_area, prompt_audio]  # 添加prompt_audio作为输出参数
+                        outputs=[prompt_dropdown]  # 移除prompt_audio作为输出参数
                     )
                 
                 # 将历史音频下拉框的change事件绑定到播放回调函数
@@ -97,7 +97,7 @@ class MainUI:
                     history_dropdown.change(
                         fn=play_history_callback,
                         inputs=[history_dropdown],
-                        outputs=[history_audio, log_area]
+                        outputs=[history_audio]
                     )
                 
                 # 绑定刷新历史音频列表事件
@@ -105,7 +105,7 @@ class MainUI:
                     refresh_history_btn.click(
                         fn=refresh_history_callback,
                         inputs=[],
-                        outputs=[history_dropdown, log_area]
+                        outputs=[history_dropdown]
                     )
                     
                     # 不再使用_js参数，而是在生成音频完成后由用户手动刷新或通过事件处理器内部处理
@@ -114,7 +114,7 @@ class MainUI:
                     demo.load(
                         fn=refresh_history_callback,
                         inputs=[],
-                        outputs=[history_dropdown, log_area],
+                        outputs=[history_dropdown],
                         show_progress=False  # 不显示进度
                     )
         
@@ -130,25 +130,19 @@ class MainUI:
         """创建主要的音频生成标签页"""
 
         with gr.Row():
-            with gr.Column(scale=1):
-                text_area = self.text_input.create_text_area(label="请输入目标文本",lines=26)
+           
 
             with gr.Column(scale=1):
-                prompt_audio = self.audio_player.create_upload_component(label="请上传参考音频")
-                
-                # 预设选择区域调整
-                with gr.Row():
-                    prompt_dropdown = self.prompt_selector.create_dropdown_component(label="或选择预设提示")
-                
+                prompt_audio = self.audio_player.create_upload_component(label="请上传参考音频")              
+                prompt_dropdown = self.prompt_selector.create_dropdown_component(label="或选择预设提示")
                 # 预设管理区域重新布局 - 移除预设名称输入框
                 with gr.Row(equal_height=True, variant="panel"):
                     save_btn = gr.Button("保存为预设", size="md")
                     refresh_btn = gr.Button("刷新预设", size="md")
                     delete_btn = gr.Button("删除预设", size="md")
                     # 添加日志显示区域
-
-                with gr.Column():   
-                    with gr.Row():
+                
+                with gr.Row():
                         mode_selector = gr.Radio(
                             choices=["普通推理", "批次推理"], 
                             label="推理模式",
@@ -158,14 +152,15 @@ class MainUI:
                         # 添加文本处理选项
                         punct_chars = gr.Textbox(label="分割标点符号", value="。？！!?;；", lines=1)
                         pause_time = gr.Number(label="停顿时间(秒)", value=0.3, step=0.1)
-                        
-                    output_audio = gr.Audio(label="生成结果", visible=True)
-                    gen_button = gr.Button("生成语音", variant="primary")    
-                
-        
-        
-        log_area = self.log_display.create_log_area(label="处理日志")
-        
+
+
+         
+            with gr.Column(scale=1.5):         
+                    
+                text_area = self.text_input.create_text_area(label="请输入目标文本",lines=18)   
+                output_audio = self.audio_player.create_playback_component(label="生成结果")
+                gen_button = gr.Button("生成语音", variant="primary")    
+
         
         
         # 添加历史音频回放区域（使用Accordion使其可折叠）
@@ -183,4 +178,4 @@ class MainUI:
         
         
         # 返回组件
-        return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, log_area, history_dropdown, refresh_history_btn, history_audio
+        return prompt_audio, prompt_dropdown, None, save_btn, refresh_btn, delete_btn, text_area, mode_selector, punct_chars, pause_time, gen_button, output_audio, history_dropdown, refresh_history_btn, history_audio
