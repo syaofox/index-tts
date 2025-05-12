@@ -25,8 +25,8 @@ class MainUI:
                         with gr.Row():
                             infer_mode = gr.Radio(choices=["普通推理", "批次推理"], label="选择推理模式（批次推理：更适合长句，性能翻倍）",value="普通推理")
                             silence_duration = gr.Slider(minimum=0, maximum=100.0, value=0.3, step=0.1, label="句子间静音时长(秒)", info="设置句子之间的停顿时间")
-                        gen_button = gr.Button("生成语音",key="gen_button",interactive=True)
-                    output_audio = gr.Audio(label="生成结果", visible=True,key="output_audio")
+                gen_button = gr.Button("生成语音",key="gen_button",interactive=True)
+                output_audio = gr.Audio(label="生成结果", visible=True,key="output_audio")
 
 
             # 参考音频上传事件
