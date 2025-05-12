@@ -12,9 +12,9 @@ class TextProcessor:
 
     def __init__(self):
         self.last_mtime = 0
-        self.replace_rules = self.load_replace_rules()
+        self.replace_rules = self._load_replace_rules()
 
-    def load_replace_rules(self) -> List[Tuple[str, str, str]]:
+    def _load_replace_rules(self) -> List[Tuple[str, str, str]]:
         if not os.path.exists(self.TEXT_REPLACE_RULES_FILE):
             return []
 
@@ -53,15 +53,15 @@ class TextProcessor:
         return self.replace_rules
 
     @staticmethod
-    def clean_quotes(text: str) -> str:
+    def _clean_quotes(text: str) -> str:
         """
         清除引号
         """
-        pattern = r"[\"\'\*\#" "]"
+        pattern = r"[\"\'\*\#“”]"
         return re.sub(pattern, "", text)
 
-    def apply_replace_rules(self, text: str) -> str:
-        replace_rules = self.load_replace_rules()
+    def _apply_replace_rules(self, text: str) -> str:
+        replace_rules = self._load_replace_rules()
 
         result_text = text
         for search_str, replace_from, replace_to in replace_rules:
@@ -75,7 +75,7 @@ class TextProcessor:
 
         return result_text
 
-    def split_text_by_speaker_and_lines(
+    def _split_text_by_speaker_and_lines(
         self, text: str, default_speaker: str
     ) -> List[Dict[str, str]]:
         """
@@ -109,10 +109,10 @@ class TextProcessor:
         text = re.sub(r"^[\n\r]+", "", text)
 
         # 清除引号
-        text = self.clean_quotes(text)
+        text = self._clean_quotes(text)
 
         # 应用替换规则
-        text = self.apply_replace_rules(text)
+        text = self._apply_replace_rules(text)
 
         segments = []
         lines = text.split("\n")
@@ -174,18 +174,18 @@ class TextProcessor:
         text = re.sub(r"^[\n\r]+", "", text)
 
         # 清除引号
-        text = self.clean_quotes(text)
+        text = self._clean_quotes(text)
 
         # 应用替换规则
-        text = self.apply_replace_rules(text)
+        text = self._apply_replace_rules(text)
 
         # 将文本按行分割
-        segments = self.split_text_by_speaker_and_lines(text, speaker)
+        segments = self._split_text_by_speaker_and_lines(text, speaker)
 
         return segments
 
     @staticmethod
-    def _generate_output_filename(speaker_name, text):
+    def generate_output_filename(speaker_name, text):
         try:
             # 清理文本内容（取前50个字符）
             text_sample = (
