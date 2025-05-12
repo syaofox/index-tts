@@ -62,7 +62,7 @@ class MainUI:
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
                             )
-                gen_button = gr.Button("生成语音", key="gen_button", interactive=True)
+                gen_button = gr.Button("生成语音", key="gen_button", interactive=True, variant="primary")
                 output_audio = gr.Audio(
                     label="生成结果",
                     visible=True,

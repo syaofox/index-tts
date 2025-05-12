@@ -124,7 +124,7 @@ class TTS_Service:
 
         speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
 
-        output_path = self.text_processor._generate_output_filename(speaker_str, text)
+        output_path = self.text_processor.generate_output_filename(speaker_str, text)
         print(f"output_path: {output_path}")
 
         # 确保音频数据保存前处于正确的状态
