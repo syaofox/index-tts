@@ -1,0 +1,38 @@
+import os
+import shutil
+import sys
+import threading
+import time
+
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+sys.path.append(os.path.join(current_dir, "indextts"))
+
+import gradio as gr
+
+from indextts.infer import IndexTTS
+from tools.i18n.i18n import I18nAuto
+from ui.main_ui import MainUI
+from ui.event_handlers import EventHandlers
+
+
+def main():
+    tts_service = IndexTTS(model_dir="checkpoints",cfg_path="checkpoints/config.yaml")
+
+    os.makedirs("outputs/tasks",exist_ok=True)
+    os.makedirs("prompts",exist_ok=True)
+
+    
+    main_ui = MainUI()
+    callback_fn = EventHandlers(tts_service)
+
+    demo = main_ui.build(callback_fn)    
+    demo.queue(20)
+    demo.launch(server_name="127.0.0.1")
+
+if __name__ == "__main__":
+    main()
