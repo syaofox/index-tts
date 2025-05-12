@@ -340,6 +340,11 @@ class IndexTTS:
         gpt_forward_time = 0
         bigvgan_time = 0
 
+        # 计算静音长度（采样点数）
+        silence_samples = int(silence_duration * sampling_rate)
+        if verbose and silence_duration > 0:
+            print(f"Adding {silence_duration}s silence ({silence_samples} samples) between sentences")
+
         # text processing
         all_text_tokens: List[List[torch.Tensor]] = []
         self._set_gr_progress(0.1, "text processing...")
@@ -497,7 +502,7 @@ class IndexTTS:
             return (sampling_rate, wav_data)
 
     # 原始推理模式
-    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120, **generation_kwargs):
+    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120,silence_duration=0.3, **generation_kwargs):
         print(">> start inference...")
         self._set_gr_progress(0, "start inference...")
         if verbose:
@@ -550,7 +555,10 @@ class IndexTTS:
         bigvgan_time = 0
         progress = 0
         has_warned = False
-        for sent in sentences:
+        silence_samples = int(silence_duration * sampling_rate)
+        if verbose and silence_duration > 0:
+            print(f"Adding {silence_duration}s silence ({silence_samples} samples) between sentences")
+        for i, sent in enumerate(sentences):
             text_tokens = self.tokenizer.convert_tokens_to_ids(sent)
             text_tokens = torch.tensor(text_tokens, dtype=torch.int32, device=self.device).unsqueeze(0)
             # text_tokens = F.pad(text_tokens, (0, 1))  # This may not be necessary.
@@ -629,6 +637,12 @@ class IndexTTS:
                     print(f"wav shape: {wav.shape}", "min:", wav.min(), "max:", wav.max())
                 # wavs.append(wav[:, :-512])
                 wavs.append(wav.cpu())  # to cpu before saving
+                
+                # 如果不是最后一个句子且静音时长大于0，添加静音段
+                if i < len(sentences) - 1 and silence_duration > 0:
+                    silence = torch.zeros((1, silence_samples), dtype=wav.dtype, device='cpu')
+                    wavs.append(silence)
+                    
         end_time = time.perf_counter()
         self._set_gr_progress(0.9, "save audio...")
         wav = torch.cat(wavs, dim=1)
@@ -667,4 +681,4 @@ if __name__ == "__main__":
     text="There is a vehicle arriving in dock number 7?"
 
     tts = IndexTTS(cfg_path="checkpoints/config.yaml", model_dir="checkpoints", is_fp16=True, use_cuda_kernel=False)
-    tts.infer(audio_prompt=prompt_wav, text=text, output_path="gen.wav", verbose=True)
+    tts.infer(audio_prompt=prompt_wav, text=text, output_path="gen.wav", verbose=True, silence_duration=0.3)
