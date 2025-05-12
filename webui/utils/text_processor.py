@@ -2,7 +2,7 @@ import re
 import os
 import time
 
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 
 class TextProcessor:
@@ -57,7 +57,7 @@ class TextProcessor:
         """
         清除引号
         """
-        pattern = r"[\"\'\*\#“”]"
+        pattern = r"[\"\'\*\#" "]"
         return re.sub(pattern, "", text)
 
     def apply_replace_rules(self, text: str) -> str:
@@ -75,25 +75,98 @@ class TextProcessor:
 
         return result_text
 
-    # 文本块处理
-    def single_stock_text(self, text: str) -> List[str]:
-        # 将文本按行分割
-        lines = text.split("\n")
-        segments = []
+    def split_text_by_speaker_and_lines(
+        self, text: str, default_speaker: str
+    ) -> List[Dict[str, str]]:
+        """
+        按角色分割文本，并返回字典列表。
+        文本格式示例：
+        ```
+        <角色名1>
+        文本内容段落1
 
-        # 处理每一行，保留空行逻辑
+        文本内容段落2
+
+        <角色名2>
+        文本内容段落1
+
+        文本内容段落2
+        ```
+
+        如果第一行不是<角色名>格式，则使用default_speaker
+
+        返回格式：
+        [
+            {"text": "文本内容段落1", "speaker": "角色名1"},
+            {"text": "<BR>", "speaker": "角色名1"},
+            ...
+        ]
+        """
+        if not text:
+            return []
+
+        # 清除文本开头的空行
+        text = re.sub(r"^[\n\r]+", "", text)
+
+        # 清除引号
+        text = self.clean_quotes(text)
+
+        # 应用替换规则
+        text = self.apply_replace_rules(text)
+
+        segments = []
+        lines = text.split("\n")
+
+        current_speaker = default_speaker
+
+        buffer = []  # 用于临时存储当前角色的文本行
+
+        # 角色标记正则表达式，匹配<角色名>格式
+        speaker_pattern = re.compile(r"^<([^>]+)>$")
+
+        # 检查第一行是否是角色标记，如果不是，保持默认角色
+        first_line_processed = False
+
         for line in lines:
             line = line.strip()
 
-            # 空行处理（添加段落分隔标记）
-            if not line:
-                segments.append(self.BR_TAG)
+            # 检查是否是角色标记行
+            speaker_match = speaker_pattern.match(line)
+            if speaker_match:
+                # 如果buffer中有内容，先处理之前角色的内容
+                if buffer:
+                    for text_line in buffer:
+                        if not text_line:
+                            segments.append(
+                                {"text": self.BR_TAG, "speaker": current_speaker}
+                            )
+                        else:
+                            segments.append(
+                                {"text": text_line, "speaker": current_speaker}
+                            )
+                    buffer = []
+
+                # 更新当前角色
+                current_speaker = speaker_match.group(1)
+                first_line_processed = True
             else:
-                segments.append(line)
+                # 普通文本行，添加到buffer
+                buffer.append(line)
+                # 如果这是第一行且不是角色标记，标记为已处理
+                if not first_line_processed:
+                    first_line_processed = True
+
+        # 处理最后一个角色的内容
+        if buffer:
+            for text_line in buffer:
+                if not text_line:
+                    segments.append({"text": self.BR_TAG, "speaker": current_speaker})
+                else:
+                    segments.append({"text": text_line, "speaker": current_speaker})
 
         return segments
 
-    def preprocess_text(self, text: str) -> List[str]:
+    def preprocess_text(self, text: str, speaker: str) -> List[Dict[str, str]]:
         if not text:
             return []
 
@@ -107,7 +180,7 @@ class TextProcessor:
         text = self.apply_replace_rules(text)
 
         # 将文本按行分割
-        segments = self.single_stock_text(text)
+        segments = self.split_text_by_speaker_and_lines(text, speaker)
 
         return segments
 

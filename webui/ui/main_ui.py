@@ -9,6 +9,15 @@ function set_dark_theme() {
     }
 }
 """
+PLACEHOLDER_TEXT = """请输入目标文本
+支持多角色，选中的角色为默认角色，格式：
+
+<角色名1>
+文本内容段落1
+
+<角色名2>
+文本内容段落2
+"""
 
 
 class MainUI:
@@ -35,7 +44,9 @@ class MainUI:
                         refresh_button = gr.Button("刷新")
 
                         input_text_single = gr.TextArea(
-                            label="请输入目标文本", key="input_text_single"
+                            label="请输入目标文本",
+                            key="input_text_single",
+                            placeholder=PLACEHOLDER_TEXT,
                         )
                         with gr.Row():
                             infer_mode = gr.Radio(
@@ -85,7 +96,13 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
-                inputs=[prompt_dropdown, prompt_audio, input_text_single, infer_mode, silence_duration],
+                inputs=[
+                    prompt_dropdown,
+                    prompt_audio,
+                    input_text_single,
+                    infer_mode,
+                    silence_duration,
+                ],
                 outputs=[output_audio],
             )
 
