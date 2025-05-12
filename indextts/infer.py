@@ -638,8 +638,8 @@ class IndexTTS:
                 # wavs.append(wav[:, :-512])
                 wavs.append(wav.cpu())  # to cpu before saving
                 
-                # 如果不是最后一个句子且静音时长大于0，添加静音段
-                if i < len(sentences) - 1 and silence_duration > 0:
+                # 添加静音段
+                if silence_duration > 0:
                     silence = torch.zeros((1, silence_samples), dtype=wav.dtype, device='cpu')
                     wavs.append(silence)
                     
