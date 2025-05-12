@@ -20,10 +20,11 @@ from tools.i18n.i18n import I18nAuto
 from ui.main_ui import MainUI
 from ui.event_handlers import EventHandlers
 from services.prompt_service import PromptService
+from services.tts_service import TTS_Service
 
 
 def main():
-    tts_service = IndexTTS(model_dir="checkpoints",cfg_path="checkpoints/config.yaml")
+    tts_service = TTS_Service()
 
     prompt_service = PromptService()
 

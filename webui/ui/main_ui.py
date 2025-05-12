@@ -49,7 +49,7 @@ class MainUI:
             )
 
             # 生成语音按钮点击事件
-            gen_button.click(event_handlers.gen_single,
+            gen_button.click(event_handlers.gen_wavdata_togr,
                             inputs=[prompt_audio, input_text_single, infer_mode, silence_duration],
                             outputs=[output_audio])
         
