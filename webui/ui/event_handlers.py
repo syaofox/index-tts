@@ -8,24 +8,10 @@ import re
 
 
 class EventHandlers:
-    def __init__(self,tts_service):
+    def __init__(self,tts_service, prompt_service):
         self.tts = tts_service
-    
-    def _load_selected_prompt(self,selected_prompt):
-        """根据选择的参考音频名称加载对应的音频文件"""
-        if selected_prompt == "无":
-            return None
-        else:
-            prompt_path = os.path.join("prompts", selected_prompt)
-            if os.path.exists(prompt_path):
-                return prompt_path
-            return None
-
-    def _get_prompt_files(self):
-        """获取prompts文件夹中的参考音频列表"""
-        prompt_files = os.listdir("prompts")
-        return ["无"] + prompt_files
-
+        self.prompt_service = prompt_service   
+ 
 
     def _gen_data(self, prompt, text, infer_mode, silence_duration=0.3):
         """根据选择的参考音频名称和文本生成音频数据"""
@@ -35,15 +21,19 @@ class EventHandlers:
         else:
             sampling_rate, wav_data  = self.tts.infer_fast(prompt, text, None, verbose=True, silence_duration=silence_duration) # 批次推理
         return sampling_rate, wav_data
+
+    @property
+    def prompt_files(self):
+        return self.prompt_service._get_prompt_files()
         
     def update_prompt_audio(self):
         return gr.update(interactive=True)
     
     def refresh_prompt_files(self):
-        return gr.update(choices=self._get_prompt_files())
+        return gr.update(choices=self.prompt_service._get_prompt_files())
 
     def dropdown_change(self,selected_prompt):
-        prompt_path = self._load_selected_prompt(selected_prompt)
+        prompt_path = self.prompt_service._load_selected_prompt(selected_prompt)
         return gr.update(value=prompt_path)
 
     def gen_single(self, prompt, text, infer_mode, silence_duration=0.3, progress=gr.Progress()):
