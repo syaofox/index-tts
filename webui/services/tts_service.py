@@ -4,6 +4,7 @@ import soundfile as sf
 
 from indextts.infer import IndexTTS
 from webui.utils.text_processor import TextProcessor
+from webui.services.prompt_service import PromptService
 
 
 class TTS_Service:
@@ -11,6 +12,7 @@ class TTS_Service:
         self.tts = IndexTTS(model_dir="checkpoints", cfg_path="checkpoints/config.yaml")
         self.progress = progress
         self.text_processor = TextProcessor()
+        self.prompt_service = PromptService()
 
     def _set_progress(self, value, desc):
         if self.progress is not None:
@@ -40,19 +42,33 @@ class TTS_Service:
 
         if infer_mode == "普通推理":
             sampling_rate, wav_data = self.tts.infer(
-                prompt_path, text, None, verbose=False, silence_duration=silence_duration
+                prompt_path,
+                text,
+                None,
+                verbose=False,
+                silence_duration=silence_duration,
             )  # 普通推理
         else:
             sampling_rate, wav_data = self.tts.infer_fast(
-                prompt_path, text, None, verbose=False, silence_duration=silence_duration
+                prompt_path,
+                text,
+                None,
+                verbose=False,
+                silence_duration=silence_duration,
             )  # 批次推理
         return sampling_rate, wav_data
 
-    def gen_wavdata_togr(self, speaker, prompt_path, text, infer_mode, silence_duration=0.3):
+    def gen_wavdata_togr(
+        self, speaker, prompt_path, text, infer_mode, silence_duration=0.3
+    ):
         # self.tts.gr_progress = progress
 
         # 预处理文本
-        text_segments = self.text_processor.preprocess_text(text)
+        text_segments = self.text_processor.preprocess_text(text, speaker)
+
+        print(f"text_segments: {text_segments}")
+
+        assert len(text_segments) > 0, "待推理文本段落数不能为空"
 
         # 生成音频数据
         wav_datas = []
@@ -63,23 +79,19 @@ class TTS_Service:
         progress_segments = [
             segment
             for segment in text_segments
-            if segment != self.text_processor.BR_TAG
+            if segment["text"] != self.text_processor.BR_TAG
         ]
         total_step = len(progress_segments)
         current_step = 0
 
-        self._set_progress(0, f"开始合成，段落数: {total_step}")
-
         for text_segment in text_segments:
-            # 更新进度条
-            if text_segment != self.text_processor.BR_TAG:
-                self._set_progress(
-                    current_step / total_step,
-                    f"合成中: {current_step}/{total_step}，文本: {text_segment[:30] + '...' if len(text_segment) > 30 else text_segment}",
-                )
-                current_step += 1
+            _speaker = text_segment["speaker"]
+            _text = text_segment["text"]
+            _prompt_path = self.prompt_service.get_prompt_file_path(_speaker)
+            if _prompt_path is None:
+                _prompt_path = prompt_path
 
-            if text_segment == self.text_processor.BR_TAG and sampling_rate is not None:
+            if _text == self.text_processor.BR_TAG and sampling_rate is not None:
                 # 计算静音长度所需的采样点数
                 silence_samples = int(sampling_rate * silence_duration)
                 if first_shape is not None and len(first_shape) > 1:  # 处理多通道音频
@@ -88,8 +100,17 @@ class TTS_Service:
                     wav_data = np.zeros(silence_samples)
                 wav_datas.append(wav_data)
             else:
+                self._set_progress(
+                    current_step / total_step,
+                    f"合成中: {current_step}/{total_step}，文本: {_text[:30] + '...' if len(_text) > 30 else _text}",
+                )
+                current_step += 1
+
                 sampling_rate, wav_data = self.gen_wavdata(
-                    prompt_path, text_segment, infer_mode, silence_duration
+                    _prompt_path,
+                    _text,
+                    infer_mode,
+                    silence_duration,
                 )
                 if first_shape is None:
                     first_shape = wav_data.shape
@@ -97,8 +118,13 @@ class TTS_Service:
 
         # 合并音频数据
         wav_data = np.concatenate(wav_datas)
+        speakers = list(
+            set([text_segment["speaker"] for text_segment in text_segments])
+        )
 
-        output_path = self.text_processor._generate_output_filename(speaker, text)
+        speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
+
+        output_path = self.text_processor._generate_output_filename(speaker_str, text)
         print(f"output_path: {output_path}")
 
         # 确保音频数据保存前处于正确的状态
