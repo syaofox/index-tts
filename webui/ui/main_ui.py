@@ -22,7 +22,9 @@ class MainUI:
                         refresh_button = gr.Button("刷新")
                         
                         input_text_single = gr.TextArea(label="请输入目标文本",key="input_text_single")
-                        infer_mode = gr.Radio(choices=["普通推理", "批次推理"], label="选择推理模式（批次推理：更适合长句，性能翻倍）",value="普通推理")
+                        with gr.Row():
+                            infer_mode = gr.Radio(choices=["普通推理", "批次推理"], label="选择推理模式（批次推理：更适合长句，性能翻倍）",value="普通推理")
+                            silence_duration = gr.Slider(minimum=0, maximum=100.0, value=0.3, step=0.1, label="句子间静音时长(秒)", info="设置句子之间的停顿时间")
                         gen_button = gr.Button("生成语音",key="gen_button",interactive=True)
                     output_audio = gr.Audio(label="生成结果", visible=True,key="output_audio")
 
@@ -48,7 +50,7 @@ class MainUI:
 
             # 生成语音按钮点击事件
             gen_button.click(callback_fn.gen_single,
-                            inputs=[prompt_audio, input_text_single, infer_mode],
+                            inputs=[prompt_audio, input_text_single, infer_mode, silence_duration],
                             outputs=[output_audio])
         
         return demo
