@@ -5,7 +5,7 @@ class MainUI:
     def __init__(self):
        pass
 
-    def build(self,callback_fn):
+    def build(self, event_handlers):
         with gr.Blocks() as demo:               
             with gr.Tab("音频生成"):
                 with gr.Row():                
@@ -15,7 +15,7 @@ class MainUI:
                     with gr.Column():
                        
                         prompt_dropdown = gr.Dropdown(
-                            choices=callback_fn._get_prompt_files(),
+                            choices=event_handlers.prompt_files,
                             label="选择参考音频",
                             value="无"
                         )
@@ -30,26 +30,26 @@ class MainUI:
 
 
             # 参考音频上传事件
-            prompt_audio.upload(callback_fn.update_prompt_audio,
+            prompt_audio.upload(event_handlers.update_prompt_audio,
                                 inputs=[],
                                 outputs=[gen_button])
             
             # 刷新按钮点击事件
             refresh_button.click(
-                fn=callback_fn.refresh_prompt_files,
+                fn=event_handlers.refresh_prompt_files,
                 inputs=[],
                 outputs=[prompt_dropdown]
             )
             
             # 下拉框选择事件
             prompt_dropdown.change(
-                fn=callback_fn.dropdown_change,
+                fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
                 outputs=[prompt_audio]
             )
 
             # 生成语音按钮点击事件
-            gen_button.click(callback_fn.gen_single,
+            gen_button.click(event_handlers.gen_single,
                             inputs=[prompt_audio, input_text_single, infer_mode, silence_duration],
                             outputs=[output_audio])
         
