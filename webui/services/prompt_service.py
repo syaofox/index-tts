@@ -1,5 +1,6 @@
 import os
 from typing import List, Dict
+from webui.utils.logger import debug
 
 
 class PromptService:
@@ -17,7 +18,7 @@ class PromptService:
 
         # 获取prompts文件夹中的参考音频列表
         files = os.listdir("prompts")
-        print(f"files: {files}")
+        debug(f"files: {files}")
 
         for file in files:
             prompt_filename = os.path.basename(file)

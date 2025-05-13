@@ -1,5 +1,7 @@
 import gradio as gr
 
+from utils.logger import debug
+
 
 class EventHandlers:
     def __init__(self, tts_service, prompt_service):
@@ -18,7 +20,7 @@ class EventHandlers:
 
     def dropdown_change(self, selected_prompt):
         prompt_path = self.prompt_service.get_prompt_file_path(selected_prompt)
-        print(f"prompt_path: {prompt_path}")
+        debug(f"prompt_path: {prompt_path}")
         return gr.update(value=prompt_path)
 
     def clear_audio(self):

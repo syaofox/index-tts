@@ -43,7 +43,6 @@ class MainUI:
                         )
                         refresh_button = gr.Button("刷新")
 
-                       
                         with gr.Row():
                             infer_mode = gr.Radio(
                                 choices=["普通推理", "批次推理"],
@@ -69,10 +68,10 @@ class MainUI:
                         )
 
                 input_text_single = gr.TextArea(
-                            label="请输入目标文本",
-                            key="input_text_single",
-                            placeholder=PLACEHOLDER_TEXT,
-                        )
+                    label="请输入目标文本",
+                    key="input_text_single",
+                    placeholder=PLACEHOLDER_TEXT,
+                )
 
                 gen_button = gr.Button(
                     "生成语音", key="gen_button", interactive=True, variant="primary"
