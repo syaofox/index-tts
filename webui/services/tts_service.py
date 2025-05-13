@@ -1,6 +1,8 @@
 import gradio as gr
 import numpy as np
 import soundfile as sf
+import torch
+import torchaudio
 
 from indextts.infer import IndexTTS
 from webui.utils.text_processor import TextProcessor
@@ -20,22 +22,46 @@ class TTS_Service:
 
     def save_wav(self, wav_data, sampling_rate, file_path):
         """保存音频数据到文件"""
-        # 检查输入数据类型和形状，确保数据格式正确
+        # 将numpy数组转换为torch.Tensor
         if isinstance(wav_data, np.ndarray):
-            # 如果wav_data已经是转置后的NumPy数组（从infer方法返回的格式），需要转置回来
-            # IndexTTS返回的是(sampling_rate, wav_data.numpy().T)
-            # 而sf.write期望的是未转置的数据
-            if wav_data.ndim == 2 and wav_data.shape[0] < wav_data.shape[1]:
-                # 如果是多通道转置格式，转置回来
+            # 确保数据是浮点类型以便正确转换
+            if np.issubdtype(wav_data.dtype, np.integer):
+                # 如果是整数类型，转换为浮点类型以便后续处理
+                wav_data = wav_data.astype(np.float32) / 32768.0
+            
+            # 处理转置问题
+            # torchaudio期望的张量形状为[channels, time]
+            if wav_data.ndim == 2 and wav_data.shape[0] > wav_data.shape[1]:
+                # 如果第一维大于第二维，假设是[time, channels]格式，需要转置
                 wav_data = wav_data.T
-
-        # 确保数据类型正确（soundfile期望int16或float32）
-        if not np.issubdtype(wav_data.dtype, np.integer):
-            # 如果不是整数类型，对数据进行缩放和转换
-            wav_data = np.clip(wav_data * 32767, -32767, 32767).astype(np.int16)
-
-        # 保存到文件
-        sf.write(file_path, wav_data, sampling_rate)
+            
+            # 转换为torch.Tensor
+            wav_tensor = torch.from_numpy(wav_data)
+        elif isinstance(wav_data, torch.Tensor):
+            wav_tensor = wav_data
+        else:
+            # 尝试转换其他类型
+            wav_tensor = torch.tensor(wav_data)
+        
+        # 确保张量形状正确：[channels, time]
+        if wav_tensor.ndim == 1:
+            # 单通道音频，添加通道维度
+            wav_tensor = wav_tensor.unsqueeze(0)
+        
+        # 确保数据类型是int16
+        wav_tensor = wav_tensor.type(torch.float32)
+        
+        # 规范化数据范围到[-1, 1]
+        with torch.no_grad():
+            max_abs = torch.max(torch.abs(wav_tensor))
+            if max_abs > 1.0:
+                wav_tensor = wav_tensor / max_abs
+        
+        # 转换为int16类型用于保存
+        wav_tensor = (wav_tensor * 32767).type(torch.int16)
+        
+        # 使用torchaudio保存
+        torchaudio.save(file_path, wav_tensor, sampling_rate)
 
     def gen_wavdata(self, prompt_path, text, infer_mode, silence_duration=0.3):
         """根据选择的参考音频名称和文本生成音频数据"""
