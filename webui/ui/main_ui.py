@@ -21,6 +21,8 @@ PLACEHOLDER_TEXT = """请输入目标文本
 
 
 class MainUI:
+    CONFIG_FILE = "webui/config.json"
+
     def __init__(self):
         pass
 
@@ -102,11 +104,22 @@ class MainUI:
                 outputs=[prompt_audio],
             )
 
+            # 界面加载时自动加载配置
+            demo.load(
+                fn=event_handlers.load_audio_settings,
+                inputs=[],
+                outputs=[silence_duration, scale_rate],
+            )
+
             # 生成语音按钮点击事件
             gen_button.click(
                 fn=event_handlers.clear_audio,
                 inputs=[],
                 outputs=[output_audio],
+            ).then(
+                fn=event_handlers.save_audio_settings,
+                inputs=[silence_duration, scale_rate],
+                outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
                 inputs=[

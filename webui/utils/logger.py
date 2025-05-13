@@ -56,7 +56,7 @@ class Logger:
             "[%(asctime)s] [%(levelname)s] [%(module)s:%(lineno)d] - %(message)s",
             datefmt="%Y-%m-%d %H:%M:%S",
         )
-        
+
         # 为INFO级别创建特殊的格式化器
         info_formatter = logging.Formatter("%(message)s")
 
@@ -68,9 +68,11 @@ class Logger:
             info_console_handler = logging.StreamHandler()
             info_console_handler.setFormatter(info_formatter)
             info_console_handler.setLevel(logging.INFO)
-            info_console_handler.addFilter(lambda record: record.levelno == logging.INFO)
+            info_console_handler.addFilter(
+                lambda record: record.levelno == logging.INFO
+            )
             self.logger.addHandler(info_console_handler)
-            
+
             # 为其他级别创建控制台处理器
             console_handler = logging.StreamHandler()
             console_handler.setFormatter(formatter)
@@ -93,7 +95,7 @@ class Logger:
             info_file_handler.setLevel(logging.INFO)
             info_file_handler.addFilter(lambda record: record.levelno == logging.INFO)
             self.logger.addHandler(info_file_handler)
-            
+
             # 为其他级别创建文件处理器
             file_handler = logging.handlers.TimedRotatingFileHandler(
                 log_file, when="midnight", backupCount=30, encoding="utf-8"

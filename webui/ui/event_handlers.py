@@ -1,12 +1,13 @@
 import gradio as gr
 
-from utils.logger import debug
+from utils.logger import debug, info
 
 
 class EventHandlers:
-    def __init__(self, tts_service, prompt_service):
+    def __init__(self, tts_service, prompt_service, config_service=None):
         self.tts = tts_service
         self.prompt_service = prompt_service
+        self.config_service = config_service
 
     @property
     def prompt_files(self):
@@ -42,3 +43,20 @@ class EventHandlers:
             speaker, prompt_path, text, infer_mode, silence_duration, scale_rate
         )
         return result
+
+    def load_audio_settings(self):
+        """加载音频设置"""
+        if self.config_service:
+            settings = self.config_service.get_audio_settings()
+            silence_duration = settings.get("silence_duration", 0.3)
+            scale_rate = settings.get("scale_rate", 1.0)
+            info(f"已加载音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}")
+            return gr.update(value=silence_duration), gr.update(value=scale_rate)
+        return gr.update(), gr.update()
+
+    def save_audio_settings(self, silence_duration, scale_rate):
+        """保存音频设置"""
+        if self.config_service:
+            self.config_service.save_audio_settings(silence_duration, scale_rate)
+            info(f"已保存音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}")
+        return None
