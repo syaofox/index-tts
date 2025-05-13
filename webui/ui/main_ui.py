@@ -97,18 +97,11 @@ class MainUI:
                 outputs=[prompt_dropdown],
             )
 
-            # 下拉框选择事件
+            # 下拉框选择事件（角色切换）- 同时加载该角色的设置
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio],
-            )
-
-            # 界面加载时自动加载配置
-            demo.load(
-                fn=event_handlers.load_audio_settings,
-                inputs=[],
-                outputs=[silence_duration, scale_rate],
+                outputs=[prompt_audio, silence_duration, scale_rate],
             )
 
             # 生成语音按钮点击事件
@@ -118,7 +111,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[silence_duration, scale_rate],
+                inputs=[prompt_dropdown, silence_duration, scale_rate],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
