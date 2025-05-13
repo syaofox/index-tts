@@ -11,3 +11,4 @@ checkpoints/.cache
 outputs/
 build/
 prompts/
+webui/config.json
