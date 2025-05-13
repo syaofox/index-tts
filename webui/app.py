@@ -21,7 +21,7 @@ def main():
 
     prompt_service = PromptService()
 
-    os.makedirs("outputs/tasks", exist_ok=True)
+    os.makedirs("outputs", exist_ok=True)
     os.makedirs("prompts", exist_ok=True)
 
     main_ui = MainUI()
