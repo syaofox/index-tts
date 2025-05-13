@@ -43,11 +43,7 @@ class MainUI:
                         )
                         refresh_button = gr.Button("刷新")
 
-                        input_text_single = gr.TextArea(
-                            label="请输入目标文本",
-                            key="input_text_single",
-                            placeholder=PLACEHOLDER_TEXT,
-                        )
+                       
                         with gr.Row():
                             infer_mode = gr.Radio(
                                 choices=["普通推理", "批次推理"],
@@ -62,7 +58,25 @@ class MainUI:
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
                             )
-                gen_button = gr.Button("生成语音", key="gen_button", interactive=True, variant="primary")
+
+                        scale_rate = gr.Slider(
+                            minimum=0.1,
+                            maximum=10.0,
+                            value=1.0,
+                            step=0.1,
+                            label="静音缩放倍率",
+                            info="调整音频中静音部分的长度，大于1表示延长，小于1表示缩短",
+                        )
+
+                input_text_single = gr.TextArea(
+                            label="请输入目标文本",
+                            key="input_text_single",
+                            placeholder=PLACEHOLDER_TEXT,
+                        )
+
+                gen_button = gr.Button(
+                    "生成语音", key="gen_button", interactive=True, variant="primary"
+                )
                 output_audio = gr.Audio(
                     label="生成结果",
                     visible=True,
@@ -102,6 +116,7 @@ class MainUI:
                     input_text_single,
                     infer_mode,
                     silence_duration,
+                    scale_rate,
                 ],
                 outputs=[output_audio],
             )
