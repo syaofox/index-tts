@@ -63,7 +63,6 @@ class EventHandlers:
         result = self.tts.gen_wavdata_togr(
             speaker, prompt_path, text, infer_mode, silence_duration, scale_rate
         )
-        info("语音生成完成")
         # 返回生成的音频和恢复的按钮状态
         return result, gr.update(interactive=True, value="生成语音")
 
