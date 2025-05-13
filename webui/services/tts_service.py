@@ -68,8 +68,8 @@ class TTS_Service:
         wav_data,
         sampling_rate,
         scale_rate=1.0,
-        silence_threshold=0.05,
-        min_silence_duration=0.01,
+        silence_threshold=0.1,
+        min_silence_duration=0.05,
     ):
         """
         找出音频数据中的静音部分，按照指定倍率缩放这些静音部分
@@ -176,7 +176,13 @@ class TTS_Service:
         return sampling_rate, wav_data
 
     def gen_wavdata_togr(
-        self, speaker, prompt_path, text, infer_mode, silence_duration=0.3
+        self,
+        speaker,
+        prompt_path,
+        text,
+        infer_mode,
+        silence_duration=0.3,
+        scale_rate=1.0,
     ):
         # self.tts.gr_progress = progress
 
@@ -232,10 +238,15 @@ class TTS_Service:
 
                 if first_shape is None:
                     first_shape = wav_data.shape
+
                 # 缩放音频中的停顿
-                _, new_wav_data = self.scale_silence(
-                    wav_data, sampling_rate, scale_rate=1
-                )
+                if scale_rate != 1.0:
+                    _, new_wav_data = self.scale_silence(
+                        wav_data, sampling_rate, scale_rate=scale_rate
+                    )
+                else:
+                    new_wav_data = wav_data
+
                 wav_datas.append(new_wav_data)
 
         # 合并音频数据
