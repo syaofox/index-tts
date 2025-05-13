@@ -106,6 +106,10 @@ class MainUI:
 
             # 生成语音按钮点击事件
             gen_button.click(
+                fn=event_handlers.set_button_generating,
+                inputs=[],
+                outputs=[gen_button],
+            ).then(
                 fn=event_handlers.clear_audio,
                 inputs=[],
                 outputs=[output_audio],
@@ -123,7 +127,7 @@ class MainUI:
                     silence_duration,
                     scale_rate,
                 ],
-                outputs=[output_audio],
+                outputs=[output_audio, gen_button],
             )
 
         return demo

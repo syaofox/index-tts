@@ -40,6 +40,11 @@ class EventHandlers:
             gr.update(value=scale_rate),
         ]
 
+    def set_button_generating(self):
+        """设置按钮为生成中状态（不可点击，文字改为生成中）"""
+        info("语音生成中...")
+        return gr.update(interactive=False, value="生成中...")
+
     def clear_audio(self):
         """清空音频输出"""
         return gr.update(value=None, visible=True)
@@ -58,7 +63,9 @@ class EventHandlers:
         result = self.tts.gen_wavdata_togr(
             speaker, prompt_path, text, infer_mode, silence_duration, scale_rate
         )
-        return result
+        info("语音生成完成")
+        # 返回生成的音频和恢复的按钮状态
+        return result, gr.update(interactive=True, value="生成语音")
 
     def load_audio_settings(self, speaker=None):
         """加载音频设置，如果提供了speaker则加载该角色的设置"""
