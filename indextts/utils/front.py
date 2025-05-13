@@ -27,11 +27,11 @@ class TextNormalizer:
             ",,,": "…",
             "，，，": "…",
             "……": "…",
-            "“": "'",
-            "”": "'",
+            """: "'",
+            """: "'",
             '"': "'",
-            "‘": "'",
-            "’": "'",
+            "'": "'",
+            "'": "'",
             "（": "'",
             "）": "'",
             "(": "'",
@@ -85,17 +85,18 @@ class TextNormalizer:
         # sys.path.append(model_dir)
         import platform
 
-        if platform.system() == "Darwin":
-            from wetext import Normalizer
+        # 所有平台都使用wetext库
+        from wetext import Normalizer
 
-            self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn")
-            self.en_normalizer = Normalizer(lang="en", operator="tn")
-        else:
-            from tn.chinese.normalizer import Normalizer as NormalizerZh
-            from tn.english.normalizer import Normalizer as NormalizerEn
-
-            self.zh_normalizer = NormalizerZh(remove_interjections=False, remove_erhua=False, overwrite_cache=False)
-            self.en_normalizer = NormalizerEn(overwrite_cache=False)
+        self.zh_normalizer = Normalizer(remove_erhua=False, lang="zh", operator="tn")
+        self.en_normalizer = Normalizer(lang="en", operator="tn")
+        # 下面的代码已不再需要
+        # else:
+        #     from tn.chinese.normalizer import Normalizer as NormalizerZh
+        #     from tn.english.normalizer import Normalizer as NormalizerEn
+        # 
+        #     self.zh_normalizer = NormalizerZh(remove_interjections=False, remove_erhua=False, overwrite_cache=False)
+        #     self.en_normalizer = NormalizerEn(overwrite_cache=False)
 
     def normalize(self, text: str) -> str:
         if not self.zh_normalizer or not self.en_normalizer:
@@ -419,7 +420,7 @@ if __name__ == "__main__":
         "晕XUAN4是一种GAN3觉",
         "我爱你！",
         "I love you!",
-        "“我爱你”的英语是“I love you”",
+        "\"我爱你\"的英语是\"I love you\"",
         "2.5平方电线",
         "共465篇，约315万字",
         "2002年的第一场雪，下在了2003年",
@@ -431,7 +432,7 @@ if __name__ == "__main__":
         "他这条视频点赞3000+，评论1000+，收藏500+",
         "这是1024元的手机，你要吗？",
         "受不liao3你了",
-        "“衣裳”不读衣chang2，而是读衣shang5",
+        "\"衣裳\"不读衣chang2，而是读衣shang5",
         "最zhong4要的是：不要chong2蹈覆辙",
         "不zuo1死就不会死",
         "See you at 8:00 AM",
@@ -447,7 +448,7 @@ if __name__ == "__main__":
         "约瑟夫·高登-莱维特（Joseph Gordon-Levitt is an American actor）",
         "蒂莫西·唐纳德·库克（英文名：Timothy Donald Cook），通称蒂姆·库克（Tim Cook），美国商业经理、工业工程师和工业开发商，现任苹果公司首席执行官。",
         # 长句子
-        "《盗梦空间》是由美国华纳兄弟影片公司出品的电影，由克里斯托弗·诺兰执导并编剧，莱昂纳多·迪卡普里奥、玛丽昂·歌迪亚、约瑟夫·高登-莱维特、艾利奥特·佩吉、汤姆·哈迪等联袂主演，2010年7月16日在美国上映，2010年9月1日在中国内地上映，2020年8月28日在中国内地重映。影片剧情游走于梦境与现实之间，被定义为“发生在意识结构内的当代动作科幻片”，讲述了由莱昂纳多·迪卡普里奥扮演的造梦师，带领特工团队进入他人梦境，从他人的潜意识中盗取机密，并重塑他人梦境的故事。",
+        "《盗梦空间》是由美国华纳兄弟影片公司出品的电影，由克里斯托弗·诺兰执导并编剧，莱昂纳多·迪卡普里奥、玛丽昂·歌迪亚、约瑟夫·高登-莱维特、艾利奥特·佩吉、汤姆·哈迪等联袂主演，2010年7月16日在美国上映，2010年9月1日在中国内地上映，2020年8月28日在中国内地重映。影片剧情游走于梦境与现实之间，被定义为\"发生在意识结构内的当代动作科幻片\"，讲述了由莱昂纳多·迪卡普里奥扮演的造梦师，带领特工团队进入他人梦境，从他人的潜意识中盗取机密，并重塑他人梦境的故事。",
     ]
     # 测试分词器
     tokenizer = TextTokenizer(
