@@ -25,8 +25,18 @@ class EventHandlers:
         """清空音频输出"""
         return gr.update(value=None, visible=True)
 
-    def gen_wavdata_togr(self, speaker, prompt_path, text, infer_mode, silence_duration=0.3):
+    def gen_wavdata_togr(
+        self,
+        speaker,
+        prompt_path,
+        text,
+        infer_mode,
+        silence_duration=0.3,
+        scale_rate=1.0,
+    ):
         """根据选择的参考音频名称和文本生成音频数据"""
-        
-        result = self.tts.gen_wavdata_togr(speaker, prompt_path, text, infer_mode, silence_duration)
+
+        result = self.tts.gen_wavdata_togr(
+            speaker, prompt_path, text, infer_mode, silence_duration, scale_rate
+        )
         return result
