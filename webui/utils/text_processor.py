@@ -3,6 +3,7 @@ import os
 import time
 
 from typing import List, Tuple, Dict
+from utils.logger import info, warning, error, debug
 
 
 class TextProcessor:
@@ -22,7 +23,7 @@ class TextProcessor:
         file_mtime = os.path.getmtime(self.TEXT_REPLACE_RULES_FILE)
 
         if file_mtime <= self.last_mtime:
-            print("文本替换规则文件未修改，跳过加载")
+            info("文本替换规则文件未修改，跳过加载")
             return self.replace_rules
 
         self.last_mtime = file_mtime
@@ -43,12 +44,12 @@ class TextProcessor:
                             (search_str, replace_from, replace_to)
                         )
                     else:
-                        print(f"警告：配置行格式不正确，已跳过: {line}")
+                        warning(f"警告：配置行格式不正确，已跳过: {line}")
 
             if self.replace_rules:
-                print(f"已加载 {len(self.replace_rules)} 条文本替换规则")
+                info(f"已加载 {len(self.replace_rules)} 条文本替换规则")
         except Exception as e:
-            print(f"加载文本替换配置文件出错: {str(e)}")
+            error(f"加载文本替换配置文件出错: {str(e)}")
 
         return self.replace_rules
 
@@ -71,7 +72,7 @@ class TextProcessor:
                 modified_search_str = search_str.replace(replace_from, replace_to)
                 # 替换原文本中的搜索字符串为修改后的字符串
                 result_text = result_text.replace(search_str, modified_search_str)
-                print(f"文本替换: {search_str} -> {modified_search_str}")
+                debug(f"文本替换: {search_str} -> {modified_search_str}")
 
         return result_text
 
