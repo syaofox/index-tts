@@ -11,11 +11,12 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 sys.path.append(os.path.join(current_dir, "indextts"))
 
-from utils.logger import info, error, debug, set_level
+from utils.logger import info, error, set_level
 from ui.main_ui import MainUI
 from ui.event_handlers import EventHandlers
 from services.prompt_service import PromptService
 from services.tts_service import TTS_Service
+from services.config_service import ConfigService
 
 
 def parse_args():
@@ -53,13 +54,16 @@ def main():
         info("初始化提示词服务...")
         prompt_service = PromptService()
 
+        info("初始化配置服务...")
+        config_service = ConfigService()
+
         info("创建必要目录...")
         os.makedirs("outputs", exist_ok=True)
         os.makedirs("prompts", exist_ok=True)
 
         info("构建用户界面...")
         main_ui = MainUI()
-        event_handlers = EventHandlers(tts_service, prompt_service)
+        event_handlers = EventHandlers(tts_service, prompt_service, config_service)
 
         info("启动 Gradio 界面...")
         demo = main_ui.build(event_handlers)
