@@ -10,11 +10,12 @@ from webui.utils.logger import debug, error, info
 
 
 class TTS_Service:
-    def __init__(self, progress=gr.Progress()):
+    def __init__(self, progress=gr.Progress(), config_service=None):
         self.tts = IndexTTS(model_dir="checkpoints", cfg_path="checkpoints/config.yaml")
         self.progress = progress
         self.text_processor = TextProcessor()
         self.prompt_service = PromptService()
+        self.config_service = config_service
 
     def _set_progress(self, value, desc):
         if self.progress is not None:
@@ -215,9 +216,22 @@ class TTS_Service:
             if _prompt_path is None:
                 _prompt_path = prompt_path
 
+            # 获取当前角色的音频设置
+            _silence_duration = silence_duration
+            _scale_rate = scale_rate
+
+            # 如果配置服务可用，为每个角色应用其特定设置
+            if self.config_service and _speaker:
+                settings = self.config_service.get_audio_settings(_speaker)
+                _silence_duration = settings.get("silence_duration", silence_duration)
+                _scale_rate = settings.get("scale_rate", scale_rate)
+                debug(
+                    f"应用角色 '{_speaker}' 的音频设置: 静音时长={_silence_duration}, 缩放倍率={_scale_rate}"
+                )
+
             if _text == self.text_processor.BR_TAG and sampling_rate is not None:
                 # 计算静音长度所需的采样点数
-                silence_samples = int(sampling_rate * silence_duration)
+                silence_samples = int(sampling_rate * _silence_duration)
                 if first_shape is not None and len(first_shape) > 1:  # 处理多通道音频
                     wav_data = np.zeros((silence_samples, first_shape[1]))
                 else:
@@ -234,16 +248,16 @@ class TTS_Service:
                     _prompt_path,
                     _text,
                     infer_mode,
-                    silence_duration,
+                    _silence_duration,
                 )
 
                 if first_shape is None:
                     first_shape = wav_data.shape
 
                 # 缩放音频中的停顿
-                if scale_rate != 1.0:
+                if _scale_rate != 1.0:
                     _, new_wav_data = self.scale_silence(
-                        wav_data, sampling_rate, scale_rate=scale_rate
+                        wav_data, sampling_rate, scale_rate=_scale_rate
                     )
                 else:
                     new_wav_data = wav_data
