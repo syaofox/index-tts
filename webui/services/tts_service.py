@@ -22,47 +22,14 @@ class TTS_Service:
             self.progress(value, desc=desc)
 
     def save_wav(self, wav_data, sampling_rate, file_path):
-        """保存音频数据到文件"""
-        # 将numpy数组转换为torch.Tensor
         if isinstance(wav_data, np.ndarray):
-            # 确保数据是浮点类型以便正确转换
-            if np.issubdtype(wav_data.dtype, np.integer):
-                # 如果是整数类型，转换为浮点类型以便后续处理
-                wav_data = wav_data.astype(np.float32) / 32768.0
-
-            # 处理转置问题
-            # torchaudio期望的张量形状为[channels, time]
-            if wav_data.ndim == 2 and wav_data.shape[0] > wav_data.shape[1]:
-                # 如果第一维大于第二维，假设是[time, channels]格式，需要转置
-                wav_data = wav_data.T
-
-            # 转换为torch.Tensor
-            wav_tensor = torch.from_numpy(wav_data)
-        elif isinstance(wav_data, torch.Tensor):
-            wav_tensor = wav_data
+            wav_data = wav_data.T
+            wav_tensor = torch.from_numpy(wav_data).type(torch.int16)
         else:
-            # 尝试转换其他类型
-            wav_tensor = torch.tensor(wav_data)
-
-        # 确保张量形状正确：[channels, time]
-        if wav_tensor.ndim == 1:
-            # 单通道音频，添加通道维度
-            wav_tensor = wav_tensor.unsqueeze(0)
-
-        # 确保数据类型是int16
-        wav_tensor = wav_tensor.type(torch.float32)
-
-        # 规范化数据范围到[-1, 1]
-        with torch.no_grad():
-            max_abs = torch.max(torch.abs(wav_tensor))
-            if max_abs > 1.0:
-                wav_tensor = wav_tensor / max_abs
-
-        # 转换为int16类型用于保存
-        wav_tensor = (wav_tensor * 32767).type(torch.int16)
-
-        # 使用torchaudio保存
+            wav_tensor = wav_data
         torchaudio.save(file_path, wav_tensor, sampling_rate)
+
+        
 
     # 按照指定倍率缩放音频中的停顿
     def scale_silence(
