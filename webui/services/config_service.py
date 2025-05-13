@@ -16,7 +16,7 @@ class ConfigService:
             # 默认配置
             default_config = {
                 "global_settings": {"silence_duration": 0.3, "scale_rate": 1.0},
-                "speaker_settings": {}
+                "speaker_settings": {},
             }
             return default_config
 
@@ -26,7 +26,10 @@ class ConfigService:
                 info(f"已加载配置文件: {self.config_file}")
                 # 确保配置文件有正确的结构
                 if "global_settings" not in config:
-                    config["global_settings"] = {"silence_duration": 0.3, "scale_rate": 1.0}
+                    config["global_settings"] = {
+                        "silence_duration": 0.3,
+                        "scale_rate": 1.0,
+                    }
                 if "speaker_settings" not in config:
                     config["speaker_settings"] = {}
                 return config
@@ -35,7 +38,7 @@ class ConfigService:
             # 返回默认配置
             return {
                 "global_settings": {"silence_duration": 0.3, "scale_rate": 1.0},
-                "speaker_settings": {}
+                "speaker_settings": {},
             }
 
     def save_config(self):
@@ -54,16 +57,18 @@ class ConfigService:
     def get_audio_settings(self, speaker=None):
         """获取音频设置，如果提供了speaker则获取对应角色的设置，否则返回全局设置"""
         default_settings = {"silence_duration": 0.3, "scale_rate": 1.0}
-        
+
         if speaker and speaker != "无":
             # 获取指定角色的设置，如果没有则使用全局设置
-            speaker_settings = self.config.get("speaker_settings", {}).get(speaker, None)
+            speaker_settings = self.config.get("speaker_settings", {}).get(
+                speaker, None
+            )
             if speaker_settings:
                 info(f"已加载角色 '{speaker}' 的音频设置")
                 return speaker_settings
             else:
                 info(f"角色 '{speaker}' 没有特定设置，使用全局设置")
-        
+
         # 返回全局设置
         return self.config.get("global_settings", default_settings)
 
@@ -73,7 +78,7 @@ class ConfigService:
             "silence_duration": silence_duration,
             "scale_rate": scale_rate,
         }
-        
+
         if speaker and speaker != "无":
             # 保存到指定角色的设置
             if "speaker_settings" not in self.config:
@@ -83,6 +88,6 @@ class ConfigService:
         else:
             # 保存到全局设置
             self.config["global_settings"] = settings
-            info(f"已保存全局音频设置")
-            
+            info("已保存全局音频设置")
+
         return self.save_config()

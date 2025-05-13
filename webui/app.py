@@ -48,14 +48,15 @@ def main():
 
     try:
         info("IndexTTS WebUI 启动中...")
-        info("初始化 TTS 服务...")
-        tts_service = TTS_Service()
+
+        info("初始化配置服务...")
+        config_service = ConfigService()
 
         info("初始化提示词服务...")
         prompt_service = PromptService()
 
-        info("初始化配置服务...")
-        config_service = ConfigService()
+        info("初始化 TTS 服务...")
+        tts_service = TTS_Service(config_service=config_service)
 
         info("创建必要目录...")
         os.makedirs("outputs", exist_ok=True)
