@@ -6,6 +6,7 @@ import torchaudio
 from indextts.infer import IndexTTS
 from webui.utils.text_processor import TextProcessor
 from webui.services.prompt_service import PromptService
+from webui.utils.logger import debug, error, info
 
 
 class TTS_Service:
@@ -132,7 +133,7 @@ class TTS_Service:
             # 计算缩放后的静音长度
             silence_length = end - start
             new_silence_length = int(silence_length * scale_rate)
-            print(
+            debug(
                 f"silence_length: {silence_length}, new_silence_length: {new_silence_length}"
             )
 
@@ -151,7 +152,7 @@ class TTS_Service:
             return sampling_rate, new_wav_data
         except ValueError as e:
             # 如果连接出错，打印错误信息并返回原始数据
-            print(f"连接错误: {str(e)}")
+            error(f"连接错误: {str(e)}")
             return sampling_rate, wav_data
 
     def gen_wavdata(self, prompt_path, text, infer_mode, silence_duration=0.3):
@@ -189,7 +190,7 @@ class TTS_Service:
         # 预处理文本
         text_segments = self.text_processor.preprocess_text(text, speaker)
 
-        print(f"text_segments: {text_segments}")
+        debug(f"text_segments: {text_segments}")
 
         assert len(text_segments) > 0, "待推理文本段落数不能为空"
 
@@ -258,7 +259,7 @@ class TTS_Service:
         speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
 
         output_path = self.text_processor.generate_output_filename(speaker_str, text)
-        print(f"output_path: {output_path}")
+        info(f"语音合成完成: {output_path}")
 
         # 确保音频数据保存前处于正确的状态
         self.save_wav(wav_data, sampling_rate, output_path)
