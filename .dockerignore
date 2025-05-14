@@ -1,0 +1,16 @@
+.git/
+.github/
+.vscode/
+.venv/
+.ruff_cache/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.pytest_cache/
+outputs/
+tests/
+*.md
+LICENSE
+DISCLAIMER
+INDEX_MODEL_LICENSE 
