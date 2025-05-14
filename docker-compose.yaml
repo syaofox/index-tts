@@ -1,0 +1,18 @@
+services:
+  app:
+    build: .
+    container_name: index-tts
+    command: python -m webui.app --log-level debug
+    ports:
+      - 7860:7860
+    volumes:
+      - ./checkpoints:/workspace/checkpoints
+      - ./prompts:/workspace/prompts
+      - ./outputs:/workspace/outputs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
