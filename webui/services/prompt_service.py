@@ -17,7 +17,7 @@ class PromptService:
         self.prompt_datas = []
 
         # 获取prompts文件夹中的参考音频列表
-        files = os.listdir("prompts")
+        files = sorted(os.listdir("prompts"))
         debug(f"files: {files}")
 
         for file in files:
