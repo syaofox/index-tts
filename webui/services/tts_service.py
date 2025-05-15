@@ -29,8 +29,6 @@ class TTS_Service:
             wav_tensor = wav_data
         torchaudio.save(file_path, wav_tensor, sampling_rate)
 
-        
-
     # 按照指定倍率缩放音频中的停顿
     def scale_silence(
         self,
@@ -187,6 +185,16 @@ class TTS_Service:
             _silence_duration = silence_duration
             _scale_rate = scale_rate
 
+            # 处理空行
+            if _text == self.text_processor.BR_TAG and sampling_rate is not None:
+                # 计算静音长度所需的采样点数
+                silence_samples = int(sampling_rate * _silence_duration)
+                if first_shape is not None and len(first_shape) > 1:  # 处理多通道音频
+                    wav_data = np.zeros((silence_samples, first_shape[1]))
+                else:
+                    wav_data = np.zeros(silence_samples)
+                wav_datas.append(wav_data)
+                continue
             # 如果配置服务可用，为每个角色应用其特定设置
             if self.config_service and _speaker:
                 settings = self.config_service.get_audio_settings(_speaker)
@@ -196,40 +204,34 @@ class TTS_Service:
                     f"应用角色 '{_speaker}' 的音频设置: 静音时长={_silence_duration}, 缩放倍率={_scale_rate}"
                 )
 
-            if _text == self.text_processor.BR_TAG and sampling_rate is not None:
-                # 计算静音长度所需的采样点数
-                silence_samples = int(sampling_rate * _silence_duration)
-                if first_shape is not None and len(first_shape) > 1:  # 处理多通道音频
-                    wav_data = np.zeros((silence_samples, first_shape[1]))
-                else:
-                    wav_data = np.zeros(silence_samples)
-                wav_datas.append(wav_data)
+            debug(f"当前角色: {_speaker}, 当前文本: {_text}")
+
+            # 更新进度条
+            self._set_progress(
+                current_step / total_step,
+                f"合成中: {current_step}/{total_step}，文本: {_text[:30] + '...' if len(_text) > 30 else _text}",
+            )
+            current_step += 1
+
+            sampling_rate, wav_data = self.gen_wavdata(
+                _prompt_path,
+                _text,
+                infer_mode,
+                _silence_duration,
+            )
+
+            if first_shape is None:
+                first_shape = wav_data.shape
+
+            # 缩放音频中的停顿
+            if _scale_rate != 1.0:
+                _, new_wav_data = self.scale_silence(
+                    wav_data, sampling_rate, scale_rate=_scale_rate
+                )
             else:
-                self._set_progress(
-                    current_step / total_step,
-                    f"合成中: {current_step}/{total_step}，文本: {_text[:30] + '...' if len(_text) > 30 else _text}",
-                )
-                current_step += 1
+                new_wav_data = wav_data
 
-                sampling_rate, wav_data = self.gen_wavdata(
-                    _prompt_path,
-                    _text,
-                    infer_mode,
-                    _silence_duration,
-                )
-
-                if first_shape is None:
-                    first_shape = wav_data.shape
-
-                # 缩放音频中的停顿
-                if _scale_rate != 1.0:
-                    _, new_wav_data = self.scale_silence(
-                        wav_data, sampling_rate, scale_rate=_scale_rate
-                    )
-                else:
-                    new_wav_data = wav_data
-
-                wav_datas.append(new_wav_data)
+            wav_datas.append(new_wav_data)
 
         # 合并音频数据
         wav_data = np.concatenate(wav_datas)
