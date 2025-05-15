@@ -64,11 +64,8 @@ class ConfigService:
                 speaker, None
             )
             if speaker_settings:
-                info(f"已加载角色 '{speaker}' 的音频设置")
                 return speaker_settings
-            else:
-                info(f"角色 '{speaker}' 没有特定设置，使用全局设置")
-
+            
         # 返回全局设置
         return self.config.get("global_settings", default_settings)
 

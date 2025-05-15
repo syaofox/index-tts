@@ -13,7 +13,7 @@ class TextProcessor:
 
     def __init__(self):
         self.last_mtime = 0
-        self.replace_rules = self._load_replace_rules()
+        self.replace_rules = []
 
     def _load_replace_rules(self) -> List[Tuple[str, str, str]]:
         if not os.path.exists(self.TEXT_REPLACE_RULES_FILE):
@@ -211,9 +211,3 @@ class TextProcessor:
             # 返回一个默认的输出路径
             timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
             return os.path.join("outputs", f"audio_{timestamp}.wav")
-
-
-if __name__ == "__main__":
-    text = "你好，世界！\n\n\n\n\n\n你好，中国！"
-    text_processor = TextProcessor()
-    print(text_processor.preprocess_text(text))
