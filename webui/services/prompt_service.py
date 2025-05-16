@@ -5,7 +5,7 @@ from webui.utils.logger import debug
 
 class PromptService:
     def __init__(self):
-        self.prompt_datas = List[Dict[str, str]]
+        self.prompt_datas: List[Dict[str, str]] = []
 
         # 加载prompt_datas
         self._load_prompt_datas()

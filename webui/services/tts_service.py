@@ -29,8 +29,6 @@ class TTS_Service:
             wav_tensor = wav_data
         torchaudio.save(file_path, wav_tensor, sampling_rate)
 
-        
-
     # 按照指定倍率缩放音频中的停顿
     def scale_silence(
         self,

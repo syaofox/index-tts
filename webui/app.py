@@ -19,8 +19,9 @@ from services.tts_service import TTS_Service
 from services.config_service import ConfigService
 
 # 设置系统变量
-os.environ['GRADIO_SERVER_NAME'] = '0.0.0.0'
-os.environ['GRADIO_SERVER_PORT'] = '7860'
+os.environ["GRADIO_SERVER_NAME"] = "0.0.0.0"
+os.environ["GRADIO_SERVER_PORT"] = "7860"
+
 
 def parse_args():
     """解析命令行参数"""
@@ -73,7 +74,9 @@ def main():
         demo = main_ui.build(event_handlers)
         demo.queue(20)
 
-        info(f"服务器准备就绪，监听地址: {os.environ['GRADIO_SERVER_NAME']}:{os.environ['GRADIO_SERVER_PORT']}")
+        info(
+            f"服务器准备就绪，监听地址: {os.environ['GRADIO_SERVER_NAME']}:{os.environ['GRADIO_SERVER_PORT']}"
+        )
         demo.launch(favicon_path="webui/favicon.png")
     except Exception as e:
         error(f"程序启动出错: {str(e)}", exc_info=True)
