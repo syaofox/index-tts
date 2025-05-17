@@ -13,7 +13,7 @@ class TextProcessor:
 
     def __init__(self):
         self.last_mtime = 0
-        self.replace_rules = self._load_replace_rules()
+        self.replace_rules = []
 
     def _load_replace_rules(self) -> List[Tuple[str, str, str]]:
         if not os.path.exists(self.TEXT_REPLACE_RULES_FILE):
