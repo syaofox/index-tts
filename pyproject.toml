@@ -50,3 +50,8 @@ explicit = true
 
 [tool.ruff]
 lint.ignore = ["E402"]
+
+[dependency-groups]
+dev = [
+    "huggingface-hub[cli]>=0.31.2",
+]
