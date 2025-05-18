@@ -59,15 +59,23 @@ class MainUI:
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
                             )
-
-                        scale_rate = gr.Slider(
-                            minimum=0.1,
-                            maximum=10.0,
-                            value=1.0,
-                            step=0.1,
-                            label="静音缩放倍率",
-                            info="调整音频中静音部分的长度，大于1表示延长，小于1表示缩短",
-                        )
+                        with gr.Row():
+                            scale_rate = gr.Slider(
+                                minimum=0.1,
+                                maximum=10.0,
+                                value=1.0,
+                                step=0.1,
+                                label="静音缩放倍率",
+                                info="大于1表示延长，小于1表示缩短",
+                            )
+                            seed = gr.Slider(
+                                minimum=0,
+                                maximum=1000000,
+                                value=0,
+                                step=1,
+                                label="随机种子",
+                                info="0表示不使用种子",
+                            )
 
                 input_text_single = gr.TextArea(
                     label="请输入目标文本",
@@ -101,7 +109,7 @@ class MainUI:
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio, silence_duration, scale_rate],
+                outputs=[prompt_audio, silence_duration, scale_rate, seed],
             )
 
             # 生成语音按钮点击事件
@@ -115,7 +123,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[prompt_dropdown, silence_duration, scale_rate],
+                inputs=[prompt_dropdown, silence_duration, scale_rate, seed],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
@@ -126,6 +134,7 @@ class MainUI:
                     infer_mode,
                     silence_duration,
                     scale_rate,
+                    seed,
                 ],
                 outputs=[output_audio, gen_button],
             )

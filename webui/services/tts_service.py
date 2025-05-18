@@ -2,6 +2,7 @@ import gradio as gr
 import numpy as np
 import torch
 import torchaudio
+import random
 
 from indextts.infer import IndexTTS
 from webui.utils.text_processor import TextProcessor
@@ -141,6 +142,17 @@ class TTS_Service:
                 silence_duration=silence_duration,
             )  # 批次推理
         return sampling_rate, wav_data
+    
+    def _set_all_seeds(self, seed):
+        """Sets the seed for reproducibility across different libraries."""
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
+    
+        return seed
 
     def gen_wavdata_togr(
         self,
@@ -150,15 +162,25 @@ class TTS_Service:
         infer_mode,
         silence_duration=0.3,
         scale_rate=1.0,
+        seed=0,
     ):
         # self.tts.gr_progress = progress
+
+        # 设置cuda随机种子
+        if seed != 0:
+            debug(f"设置cuda随机种子: {seed}")
+            self._set_all_seeds(seed)
+
 
         # 预处理文本
         text_segments = self.text_processor.preprocess_text(text, speaker)
 
         debug(f"text_segments: {text_segments}")
 
-        assert len(text_segments) > 0, "待推理文本段落数不能为空"
+        if len(text_segments) <= 0:
+            error("待推理文本段落数不能为空")
+            # 返回空音频数据
+            return gr.update(value=None, visible=True)
 
         # 生成音频数据
         wav_datas = []
@@ -241,7 +263,7 @@ class TTS_Service:
 
         speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
 
-        output_path = self.text_processor.generate_output_filename(speaker_str, text)
+        output_path = self.text_processor.generate_output_filename(speaker_str, text, seed)
         info(f"语音合成完成: {output_path}")
 
         # 确保音频数据保存前处于正确的状态
