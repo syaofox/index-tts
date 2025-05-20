@@ -25,14 +25,15 @@ class EventHandlers:
         debug(f"prompt_path: {prompt_path}")
 
         # 加载角色的音频设置
-        silence_duration, scale_rate = 0.3, 1.0
+        silence_duration, scale_rate, seed, tts_version = 0.3, 1.0, 0, 1
         if self.config_service and selected_prompt:
             settings = self.config_service.get_audio_settings(selected_prompt)
             silence_duration = settings.get("silence_duration", 0.3)
             scale_rate = settings.get("scale_rate", 1.0)
             seed = settings.get("seed", 0)
+            tts_version = settings.get("tts_version", 1)
             info(
-                f"已加载角色 '{selected_prompt}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}"
+                f"已加载角色 '{selected_prompt}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}, TTS版本={tts_version}"
             )
 
         return [
@@ -40,6 +41,7 @@ class EventHandlers:
             gr.update(value=silence_duration),
             gr.update(value=scale_rate),
             gr.update(value=seed),
+            gr.update(value=tts_version),
         ]
 
     def set_button_generating(self):
@@ -60,11 +62,12 @@ class EventHandlers:
         silence_duration=0.3,
         scale_rate=1.0,
         seed=0,
+        tts_version=1,
     ):
         """根据选择的参考音频名称和文本生成音频数据"""
 
         result = self.tts.gen_wavdata_togr(
-            speaker, prompt_path, text, infer_mode, silence_duration, scale_rate, seed
+            speaker, prompt_path, text, infer_mode, silence_duration, scale_rate, seed, tts_version
         )
         # 返回生成的音频和恢复的按钮状态
         return result, gr.update(interactive=True, value="生成语音")
@@ -76,29 +79,30 @@ class EventHandlers:
             silence_duration = settings.get("silence_duration", 0.3)
             scale_rate = settings.get("scale_rate", 1.0)
             seed = settings.get("seed", 0)
+            tts_version = settings.get("tts_version", 1)
             if speaker:
                 info(
-                    f"已加载角色 '{speaker}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}"
+                    f"已加载角色 '{speaker}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}, TTS版本={tts_version}"
                 )
             else:
                 info(
-                    f"已加载全局音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}   "
+                    f"已加载全局音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}, TTS版本={tts_version}"
                 )
-            return gr.update(value=silence_duration), gr.update(value=scale_rate), gr.update(value=seed)
-        return gr.update(), gr.update(), gr.update()
+            return gr.update(value=silence_duration), gr.update(value=scale_rate), gr.update(value=seed), gr.update(value=tts_version)
+        return gr.update(), gr.update(), gr.update(), gr.update()
 
-    def save_audio_settings(self, speaker, silence_duration, scale_rate, seed):
+    def save_audio_settings(self, speaker, silence_duration, scale_rate, seed, tts_version=1):
         """保存音频设置到当前选中的角色"""
         if self.config_service:
             self.config_service.save_audio_settings(
-                speaker, silence_duration, scale_rate, seed
+                speaker, silence_duration, scale_rate, seed, tts_version
             )
             if speaker and speaker != "无":
                 info(
-                    f"已保存角色 '{speaker}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}"
+                    f"已保存角色 '{speaker}' 的音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}, TTS版本={tts_version}"
                 )
             else:
                 info(
-                    f"已保存全局音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}"
+                    f"已保存全局音频设置: 静音时长={silence_duration}, 缩放倍率={scale_rate}, 随机种子={seed}, TTS版本={tts_version}"
                 )
         return None

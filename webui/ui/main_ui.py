@@ -46,10 +46,18 @@ class MainUI:
                         refresh_button = gr.Button("刷新")
 
                         with gr.Row():
+                            tts_version = gr.Radio(
+                                choices=[1.0, 1.5],
+                                label="TTS模型版本",
+                                value=1.0,
+                                type="value",
+                                info="选择要使用的TTS模型版本",
+                            )
                             infer_mode = gr.Radio(
                                 choices=["普通推理", "批次推理"],
-                                label="选择推理模式（批次推理：更适合长句，性能翻倍）",
+                                label="选择推理模式",
                                 value="普通推理",
+                                info="批次推理更适合长句，性能翻倍",
                             )
                             silence_duration = gr.Slider(
                                 minimum=0,
@@ -59,6 +67,8 @@ class MainUI:
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
                             )
+                        
+                            
                         with gr.Row():
                             scale_rate = gr.Slider(
                                 minimum=0.1,
@@ -109,7 +119,7 @@ class MainUI:
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio, silence_duration, scale_rate, seed],
+                outputs=[prompt_audio, silence_duration, scale_rate, seed, tts_version],
             )
 
             # 生成语音按钮点击事件
@@ -123,7 +133,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[prompt_dropdown, silence_duration, scale_rate, seed],
+                inputs=[prompt_dropdown, silence_duration, scale_rate, seed, tts_version],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
@@ -135,6 +145,7 @@ class MainUI:
                     silence_duration,
                     scale_rate,
                     seed,
+                    tts_version,
                 ],
                 outputs=[output_audio, gen_button],
             )
