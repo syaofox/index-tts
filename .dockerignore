@@ -15,6 +15,7 @@ LICENSE
 DISCLAIMER
 INDEX_MODEL_LICENSE
 checkpoints/
+checkpoints1.5/
 assets/
 tools/
 **/*.log
