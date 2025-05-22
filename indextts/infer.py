@@ -340,11 +340,6 @@ class IndexTTS:
         gpt_forward_time = 0
         bigvgan_time = 0
 
-        # 计算静音长度（采样点数）
-        silence_samples = int(silence_duration * sampling_rate)
-        if verbose and silence_duration > 0:
-            print(f"Adding {silence_duration}s silence ({silence_samples} samples) between sentences")
-
         # text processing
         all_text_tokens: List[List[torch.Tensor]] = []
         self._set_gr_progress(0.1, "text processing...")
