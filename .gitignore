@@ -15,3 +15,11 @@ build/
 .venv
 prompts/
 webui/config.json
+checkpoints/1.0/*.pth
+checkpoints/1.0/*.vocab
+checkpoints/1.0/*.model
+checkpoints/1.0/.cache
+checkpoints/1.5/*.pth
+checkpoints/1.5/*.vocab
+checkpoints/1.5/*.model
+checkpoints/1.5/.cache
