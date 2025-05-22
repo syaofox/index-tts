@@ -188,7 +188,6 @@ class TTS_Service:
                 text,
                 None,
                 verbose=False,
-                silence_duration=silence_duration,
             )  # 批次推理
         return sampling_rate, wav_data
     
