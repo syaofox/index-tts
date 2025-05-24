@@ -179,7 +179,7 @@ class TTS_Service:
                 prompt_path,
                 text,
                 None,
-                verbose=False,
+                verbose=True,
                 silence_duration=silence_duration,
             )  # 普通推理
         else:
