@@ -524,7 +524,7 @@ class IndexTTS:
         self._set_gr_progress(0.1, "text processing...")
         auto_conditioning = cond_mel
         text_tokens_list = self.tokenizer.tokenize(text)
-        sentences = self.tokenizer.split_sentences(text_tokens_list, max_text_tokens_per_sentence)
+        sentences = self.tokenizer.merge_sentences(text_tokens_list)
         if verbose:
             print("text token count:", len(text_tokens_list))
             print("sentences count:", len(sentences))
