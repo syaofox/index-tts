@@ -429,6 +429,47 @@ class TextTokenizer:
         return TextTokenizer.split_sentences_by_token(
             tokenized, self.punctuation_marks_tokens, max_tokens_per_sentence=max_tokens_per_sentence
         )
+   
+    def merge_sentences(self, tokenized: List[str]) -> List[List[str]]:
+        # 不切分
+        result = []
+        for item in tokenized:
+            result.append(item)
+          
+        return [result]
+
+    def split_sentences_ex(self, text: str, max_tokens_per_sentence=120) -> List[List[str]]:
+        # 按照标点符号切分
+
+        result = []        
+        punctuation_marks= '.!?;！？；。'
+        punctuation_marks = '.!?;！？；。'
+
+        # 在标点符号后面分割文本
+        pattern = r"(?<=[{}])".format(punctuation_marks)
+        text_list = re.split(pattern, text)
+
+        
+        tokenized: List[str] = []
+        for text in text_list:
+            if text.strip() == "":
+                continue
+            if text in punctuation_marks:
+                continue
+
+            tokenized = self.tokenize(text)          
+            current_segment = []
+            for item in tokenized:
+                if item in punctuation_marks:
+                    result.append(current_segment)
+                    current_segment = []
+                else:
+                    current_segment.append(item)
+            # Add the last segment if it's not empty
+            if current_segment:
+                result.append(current_segment)
+        
+        return result
 
 
 if __name__ == "__main__":
