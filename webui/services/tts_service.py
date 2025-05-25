@@ -42,44 +42,51 @@ class TTS_Service:
             wav_tensor = torch.from_numpy(wav_data).type(torch.int16)
         else:
             wav_tensor = wav_data
-        torchaudio.save(file_path, wav_tensor, sampling_rate)   
+        torchaudio.save(file_path, wav_tensor, sampling_rate)
 
-    def gen_wavdata(self, prompt_path, text, infer_mode, silence_duration=0.3, tts_version=1):
+    def gen_wavdata(
+        self, prompt_path, text, infer_mode, silence_duration=0.3, tts_version=1
+    ):
         """根据选择的参考音频名称和文本生成音频数据"""
-        
+
         # 仅在初次使用或版本变更时实例化TTS模型
         if self.tts is None or self.current_tts_version != tts_version:
             debug(f"初始化或更新TTS模型，版本：{tts_version}")
-            
+
             # 如果存在旧模型，先清理其占用的显存
             if self.tts is not None:
                 debug(f"清理旧版本({self.current_tts_version})TTS模型的显存")
-                
+
                 # 使用IndexTTS自带的方法清理显存
                 self.tts.torch_empty_cache()
-                
+
                 # 先将引用设为None，帮助垃圾回收
                 self.tts = None
-                
+
                 # 强制执行一次垃圾回收
                 import gc
+
                 gc.collect()
-                
+
                 # 再次清理CUDA缓存
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
-                    debug(f"显存已清理")
-            
+                    debug("显存已清理")
+
             # 初始化新的TTS模型
             if tts_version == 1:
-                self.tts = IndexTTS(model_dir="checkpoints/1.0", cfg_path="checkpoints/1.0/config.yaml")
+                self.tts = IndexTTS(
+                    model_dir="checkpoints/1.0", cfg_path="checkpoints/1.0/config.yaml"
+                )
             else:
-                self.tts = IndexTTS(model_dir="checkpoints/1.5", cfg_path="checkpoints/1.5/config.yaml")
+                self.tts = IndexTTS(
+                    model_dir="checkpoints/1.5", cfg_path="checkpoints/1.5/config.yaml"
+                )
             self.current_tts_version = tts_version
-            
+
             if torch.cuda.is_available():
                 debug(f"当前显存占用: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
-        
+
         debug(f"tts_version: {tts_version}, model_dir: {self.tts.model_dir}")
 
         if infer_mode == "普通推理":
@@ -98,7 +105,7 @@ class TTS_Service:
                 verbose=False,
             )  # 批次推理
         return sampling_rate, wav_data
-    
+
     def _set_all_seeds(self, seed):
         """Sets the seed for reproducibility across different libraries."""
         random.seed(seed)
@@ -107,11 +114,11 @@ class TTS_Service:
         if torch.cuda.is_available():
             torch.cuda.manual_seed(seed)
             torch.cuda.manual_seed_all(seed)
-    
+
         return seed
 
     def gen_wavdata_togr(
-        self,       
+        self,
         speaker,
         prompt_path,
         text,
@@ -126,7 +133,6 @@ class TTS_Service:
         if seed != 0:
             debug(f"设置cuda随机种子: {seed}")
             self._set_all_seeds(seed)
-
 
         # 预处理文本
         text_segments = self.text_processor.preprocess_text(text, speaker)
@@ -159,9 +165,19 @@ class TTS_Service:
             if _prompt_path is None:
                 _prompt_path = prompt_path
 
-            # 获取当前角色的音频设置
             _silence_duration = silence_duration
-   
+            _seed = seed
+            _tts_version = tts_version
+
+            if self.config_service and _speaker:
+                settings = self.config_service.get_audio_settings(_speaker)
+                _silence_duration = settings.get("silence_duration", silence_duration)
+                _seed = settings.get("seed", seed)
+                _tts_version = settings.get("tts_version", tts_version)
+
+            debug(
+                f"当前角色: {_speaker}, 当前文本: {_text}, 静音时长={_silence_duration}, 随机种子={_seed}, TTS版本={_tts_version}"
+            )
 
             # 处理空行
             if _text == self.text_processor.BR_TAG and sampling_rate is not None:
@@ -171,18 +187,10 @@ class TTS_Service:
                     wav_data = np.zeros((silence_samples, first_shape[1]))
                 else:
                     wav_data = np.zeros(silence_samples)
+
+                debug(f"添加静音: {_silence_duration}秒")
                 wav_datas.append(wav_data)
                 continue
-            # 如果配置服务可用，为每个角色应用其特定设置
-            if self.config_service and _speaker:
-                settings = self.config_service.get_audio_settings(_speaker)
-                _silence_duration = settings.get("silence_duration", silence_duration)
-          
-                debug(
-                    f"当前角色: {_speaker}, 当前文本: {_text}, 静音时长={_silence_duration}, "
-                )
-            else:
-                debug(f"当前角色: {_speaker}, 当前文本: {_text}, 静音时长={_silence_duration}")
 
             # 更新进度条
             self._set_progress(
@@ -191,17 +199,13 @@ class TTS_Service:
             )
             current_step += 1
 
-            sampling_rate, wav_data = self.gen_wavdata(                
-                _prompt_path,
-                _text,
-                infer_mode,
-                _silence_duration,
-                tts_version
+            sampling_rate, wav_data = self.gen_wavdata(
+                _prompt_path, _text, infer_mode, _silence_duration, tts_version
             )
 
             if first_shape is None:
                 first_shape = wav_data.shape
-                
+
             wav_datas.append(wav_data)
 
         # 合并音频数据
@@ -212,7 +216,9 @@ class TTS_Service:
 
         speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
 
-        output_path = self.text_processor.generate_output_filename(speaker_str, text, seed)
+        output_path = self.text_processor.generate_output_filename(
+            speaker_str, text, seed
+        )
         info(f"语音合成完成: {output_path}")
 
         # 确保音频数据保存前处于正确的状态
