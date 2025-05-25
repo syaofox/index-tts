@@ -59,6 +59,10 @@ class MainUI:
                                 value="普通推理",
                                 info="批次推理更适合长句，性能翻倍",
                             )
+                            
+                        
+                            
+                        with gr.Row():  
                             silence_duration = gr.Slider(
                                 minimum=0,
                                 maximum=100.0,
@@ -66,18 +70,7 @@ class MainUI:
                                 step=0.1,
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
-                            )
-                        
-                            
-                        with gr.Row():
-                            scale_rate = gr.Slider(
-                                minimum=0.1,
-                                maximum=10.0,
-                                value=1.0,
-                                step=0.1,
-                                label="静音缩放倍率",
-                                info="大于1表示延长，小于1表示缩短",
-                            )
+                            )                         
                             seed = gr.Slider(
                                 minimum=0,
                                 maximum=1000000,
@@ -119,7 +112,7 @@ class MainUI:
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio, silence_duration, scale_rate, seed, tts_version],
+                outputs=[prompt_audio, silence_duration,  seed, tts_version],
             )
 
             # 生成语音按钮点击事件
@@ -133,7 +126,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[prompt_dropdown, silence_duration, scale_rate, seed, tts_version],
+                inputs=[prompt_dropdown, silence_duration,  seed, tts_version],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
@@ -142,8 +135,7 @@ class MainUI:
                     prompt_audio,
                     input_text_single,
                     infer_mode,
-                    silence_duration,
-                    scale_rate,
+                    silence_duration,           
                     seed,
                     tts_version,
                 ],
