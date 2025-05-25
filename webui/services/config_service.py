@@ -15,7 +15,7 @@ class ConfigService:
         if not os.path.exists(self.config_file):
             # 默认配置
             default_config = {
-                "global_settings": {"silence_duration": 0.3, "scale_rate": 1.0, "seed": 0, "tts_version": 1},
+                "global_settings": {"silence_duration": 0.3,"seed": 0, "tts_version": 1},
                 "speaker_settings": {},
             }
             return default_config
@@ -28,7 +28,6 @@ class ConfigService:
                 if "global_settings" not in config:
                     config["global_settings"] = {
                         "silence_duration": 0.3,
-                        "scale_rate": 1.0,
                         "seed": 0,
                         "tts_version": 1,
                     }
@@ -39,7 +38,7 @@ class ConfigService:
             error(f"加载配置文件失败: {str(e)}")
             # 返回默认配置
             return {
-                "global_settings": {"silence_duration": 0.3, "scale_rate": 1.0, "seed": 0, "tts_version": 1},
+                "global_settings": {"silence_duration": 0.3, "seed": 0, "tts_version": 1},
                 "speaker_settings": {},
             }
 
@@ -58,7 +57,7 @@ class ConfigService:
 
     def get_audio_settings(self, speaker=None):
         """获取音频设置，如果提供了speaker则获取对应角色的设置，否则返回全局设置"""
-        default_settings = {"silence_duration": 0.3, "scale_rate": 1.0, "seed": 0, "tts_version": 1}
+        default_settings = {"silence_duration": 0.3, "seed": 0, "tts_version": 1}
 
         if speaker and speaker != "无":
             # 获取指定角色的设置，如果没有则使用全局设置
@@ -71,11 +70,10 @@ class ConfigService:
         # 返回全局设置
         return self.config.get("global_settings", default_settings)
 
-    def save_audio_settings(self, speaker, silence_duration, scale_rate, seed, tts_version=1):
+    def save_audio_settings(self, speaker, silence_duration,seed, tts_version=1):
         """保存音频设置，如果提供了speaker则保存为对应角色的设置，否则保存为全局设置"""
         settings = {
             "silence_duration": silence_duration,
-            "scale_rate": scale_rate,
             "seed": seed,
             "tts_version": tts_version,
         }
