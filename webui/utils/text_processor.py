@@ -66,6 +66,8 @@ class TextProcessor:
 
         result_text = text
         for search_str, replace_from, replace_to in replace_rules:
+            # replace_to左右添加空格
+            replace_to = f" {replace_to} "
             # 在搜索字符串中查找需要修改的部分并替换
             if search_str in result_text:
                 # 创建一个新字符串，将搜索字符串中的替换源替换为替换目标
