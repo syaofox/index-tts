@@ -438,7 +438,7 @@ class TextTokenizer:
           
         return [result]
 
-    def split_sentences_ex(self, text: str, max_tokens_per_sentence=120) -> List[List[str]]:
+    def split_sentences_ex(self, text: str) -> List[List[str]]:
         # 按照标点符号切分
 
         result = []        

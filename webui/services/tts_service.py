@@ -45,7 +45,7 @@ class TTS_Service:
         torchaudio.save(file_path, wav_tensor, sampling_rate)
 
     def gen_wavdata(
-        self, prompt_path, text, infer_mode, silence_duration=0.3,  tts_version=1, max_text_tokens_per_sentence=80
+        self, prompt_path, text, infer_mode, silence_duration=0.3,  tts_version=1, max_text_tokens_per_sentence=80, split_mode="sentence"
     ):
         """根据选择的参考音频名称和文本生成音频数据"""
 
@@ -97,6 +97,7 @@ class TTS_Service:
                 verbose=True,
                 max_text_tokens_per_sentence=max_text_tokens_per_sentence,
                 silence_duration=silence_duration,
+                split_mode=split_mode
             )  # 普通推理
         else:
             sampling_rate, wav_data = self.tts.infer_fast(
@@ -128,6 +129,7 @@ class TTS_Service:
         seed=0,
         tts_version=1,
         max_text_tokens_per_sentence=80,
+        split_mode="sentence",
     ):
         # self.tts.gr_progress = progress
 
@@ -202,7 +204,7 @@ class TTS_Service:
             current_step += 1
 
             sampling_rate, wav_data = self.gen_wavdata(
-                _prompt_path, _text, infer_mode, _silence_duration, tts_version, max_text_tokens_per_sentence
+                _prompt_path, _text, infer_mode, _silence_duration, _tts_version, max_text_tokens_per_sentence, split_mode
             )
 
             if first_shape is None:
