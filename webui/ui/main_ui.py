@@ -59,6 +59,12 @@ class MainUI:
                                 value="普通推理",
                                 info="批次推理更适合长句，性能翻倍",
                             )
+                            split_mode = gr.Radio(
+                                choices=["sentence", "punctuation", "none"],
+                                label="分句模式",
+                                value="sentence",
+                                info="sentence:按句分割 punctuation:按标点分割 none:不分割",
+                            )
                             
                         
                             
@@ -147,6 +153,7 @@ class MainUI:
                     seed,
                     tts_version,
                     max_text_tokens_per_sentence,
+                    split_mode,
                 ],
                 outputs=[output_audio, gen_button],
             )

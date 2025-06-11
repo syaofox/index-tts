@@ -63,11 +63,12 @@ class EventHandlers:
         seed=0,
         tts_version=1,
         max_text_tokens_per_sentence=80,
+        split_mode="sentence",
     ):
         """根据选择的参考音频名称和文本生成音频数据"""
 
         result = self.tts.gen_wavdata_togr(
-            speaker, prompt_path, text, infer_mode, silence_duration, seed, tts_version, max_text_tokens_per_sentence
+            speaker, prompt_path, text, infer_mode, silence_duration, seed, tts_version, max_text_tokens_per_sentence, split_mode
         )
         # 返回生成的音频和恢复的按钮状态
         return result, gr.update(interactive=True, value="生成语音")
