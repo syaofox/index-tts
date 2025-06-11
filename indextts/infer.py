@@ -497,7 +497,7 @@ class IndexTTS:
             return (sampling_rate, wav_data)
 
     # 原始推理模式
-    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120,silence_duration=0.3, **generation_kwargs):
+    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120,silence_duration=0.0, **generation_kwargs):
         print(">> start inference...")
         self._set_gr_progress(0, "start inference...")
         if verbose:
@@ -526,7 +526,7 @@ class IndexTTS:
         self._set_gr_progress(0.1, "text processing...")
         auto_conditioning = cond_mel
         text_tokens_list = self.tokenizer.tokenize(text)
-        sentences = self.tokenizer.merge_sentences(text_tokens_list)
+        sentences = self.tokenizer.split_sentences(text_tokens_list, max_tokens_per_sentence=max_text_tokens_per_sentence)
         if verbose:
             print("text token count:", len(text_tokens_list))
             print("sentences count:", len(sentences))
