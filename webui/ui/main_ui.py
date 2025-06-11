@@ -79,6 +79,14 @@ class MainUI:
                                 label="随机种子",
                                 info="0表示不使用种子",
                             )
+                            max_text_tokens_per_sentence = gr.Slider(
+                                minimum=10,
+                                maximum=120,
+                                value=80,
+                                step=1,
+                                label="句子最大长度",
+                                info="设置句子最大长度，超过该长度会自动切分",
+                            )
 
                 input_text_single = gr.TextArea(
                     label="请输入目标文本",
@@ -112,7 +120,7 @@ class MainUI:
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio, silence_duration,  seed, tts_version],
+                outputs=[prompt_audio, silence_duration,  seed, tts_version, max_text_tokens_per_sentence],
             )
 
             # 生成语音按钮点击事件
@@ -126,7 +134,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[prompt_dropdown, silence_duration,  seed, tts_version],
+                inputs=[prompt_dropdown, silence_duration,  seed, tts_version, max_text_tokens_per_sentence],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
@@ -138,6 +146,7 @@ class MainUI:
                     silence_duration,           
                     seed,
                     tts_version,
+                    max_text_tokens_per_sentence,
                 ],
                 outputs=[output_audio, gen_button],
             )
