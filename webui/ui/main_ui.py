@@ -60,10 +60,10 @@ class MainUI:
                                 info="批次推理更适合长句，性能翻倍",
                             )
                             split_mode = gr.Radio(
-                                choices=["sentence", "punctuation", "none"],
+                                choices=["punctuation", "sentence", "none"],
                                 label="分句模式",
-                                value="sentence",
-                                info="sentence:按句分割 punctuation:按标点分割 none:不分割",
+                                value="punctuation",
+                                info="punctuation:按标点分割,sentence:按长度分割,none:不分割",
                             )
                             
                         
