@@ -77,14 +77,6 @@ class MainUI:
                                 label="句子间静音时长(秒)",
                                 info="设置句子之间的停顿时间",
                             )                         
-                            seed = gr.Slider(
-                                minimum=0,
-                                maximum=1000000,
-                                value=0,
-                                step=1,
-                                label="随机种子",
-                                info="0表示不使用种子",
-                            )
                             max_text_tokens_per_sentence = gr.Slider(
                                 minimum=10,
                                 maximum=120,
@@ -126,7 +118,7 @@ class MainUI:
             prompt_dropdown.change(
                 fn=event_handlers.dropdown_change,
                 inputs=[prompt_dropdown],
-                outputs=[prompt_audio, silence_duration,  seed, tts_version, max_text_tokens_per_sentence],
+                outputs=[prompt_audio, silence_duration, tts_version, max_text_tokens_per_sentence],
             )
 
             # 生成语音按钮点击事件
@@ -140,7 +132,7 @@ class MainUI:
                 outputs=[output_audio],
             ).then(
                 fn=event_handlers.save_audio_settings,
-                inputs=[prompt_dropdown, silence_duration,  seed, tts_version, max_text_tokens_per_sentence],
+                inputs=[prompt_dropdown, silence_duration, tts_version, max_text_tokens_per_sentence],
                 outputs=[],
             ).then(
                 fn=event_handlers.gen_wavdata_togr,
@@ -150,7 +142,6 @@ class MainUI:
                     input_text_single,
                     infer_mode,
                     silence_duration,           
-                    seed,
                     tts_version,
                     max_text_tokens_per_sentence,
                     split_mode,

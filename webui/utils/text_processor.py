@@ -58,7 +58,7 @@ class TextProcessor:
         """
         清除引号
         """
-        pattern = r"[\"\'\*\#“”]"
+        pattern = r"[\"\'\*\#""]"
         return re.sub(pattern, "", text)
 
     def _apply_replace_rules(self, text: str) -> str:
@@ -188,7 +188,7 @@ class TextProcessor:
         return segments
 
     @staticmethod
-    def generate_output_filename(speaker_name, text, seed):
+    def generate_output_filename(speaker_name, text,tts_version):
         try:
             # 清理文本内容（取前50个字符）
             text_sample = (
@@ -201,7 +201,7 @@ class TextProcessor:
 
             # 添加时间戳
             timestamp = time.strftime("%Y%m%d%H%M%S", time.localtime())
-            output_filename = f"[{speaker_name}][{timestamp}]{text_sample}[{seed}]"
+            output_filename = f"[{speaker_name}][{tts_version}][{timestamp}]{text_sample}"
             output_path = os.path.join("outputs", f"{output_filename}.wav")
 
             # 确保输出目录存在
