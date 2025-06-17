@@ -16,21 +16,9 @@ class TTS_Service:
         self.text_processor = TextProcessor()
         self.prompt_service = PromptService()
         self.config_service = config_service
-        self.tts = None
+        # 将单一TTS模型改为字典形式，以版本为key
+        self.tts_models = {}
         self.current_tts_version = None
-
-    def __del__(self):
-        """确保在对象销毁时释放资源"""
-        try:
-            if self.tts is not None:
-                debug("TTS_Service 析构：清理TTS模型显存")
-                self.tts.torch_empty_cache()
-                self.tts = None
-                # 清理CUDA缓存
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-        except Exception as e:
-            error(f"释放TTS模型资源时出错: {str(e)}")
 
     def _set_progress(self, value, desc):
         if self.progress is not None:
@@ -49,48 +37,32 @@ class TTS_Service:
     ):
         """根据选择的参考音频名称和文本生成音频数据"""
 
-        # 仅在初次使用或版本变更时实例化TTS模型
-        if self.tts is None or self.current_tts_version != tts_version:
-            debug(f"初始化或更新TTS模型，版本：{tts_version}")
-
-            # 如果存在旧模型，先清理其占用的显存
-            if self.tts is not None:
-                debug(f"清理旧版本({self.current_tts_version})TTS模型的显存")
-
-                # 使用IndexTTS自带的方法清理显存
-                self.tts.torch_empty_cache()
-
-                # 先将引用设为None，帮助垃圾回收
-                self.tts = None
-
-                # 强制执行一次垃圾回收
-                import gc
-
-                gc.collect()
-
-                # 再次清理CUDA缓存
-                if torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                    debug("显存已清理")
+        # 如果该版本模型尚未加载，则加载
+        if tts_version not in self.tts_models or self.tts_models[tts_version] is None:
+            debug(f"加载TTS模型，版本：{tts_version}")
 
             # 初始化新的TTS模型
             if tts_version == 1:
-                self.tts = IndexTTS(
+                self.tts_models[tts_version] = IndexTTS(
                     model_dir="checkpoints/1.0", cfg_path="checkpoints/1.0/config.yaml"
                 )
             else:
-                self.tts = IndexTTS(
+                self.tts_models[tts_version] = IndexTTS(
                     model_dir="checkpoints/1.5", cfg_path="checkpoints/1.5/config.yaml"
                 )
-            self.current_tts_version = tts_version
-
+            
             if torch.cuda.is_available():
                 debug(f"当前显存占用: {torch.cuda.memory_allocated() / 1024**2:.2f} MB")
 
-        debug(f"tts_version: {tts_version}, model_dir: {self.tts.model_dir}")
+        # 更新当前使用的模型版本
+        self.current_tts_version = tts_version
+        # 获取当前版本的模型
+        tts = self.tts_models[tts_version]
+
+        debug(f"tts_version: {tts_version}, model_dir: {tts.model_dir}")
 
         if infer_mode == "普通推理":
-            sampling_rate, wav_data = self.tts.infer(
+            sampling_rate, wav_data = tts.infer(
                 prompt_path,
                 text,
                 None,
@@ -100,7 +72,7 @@ class TTS_Service:
                 split_mode=split_mode
             )  # 普通推理
         else:
-            sampling_rate, wav_data = self.tts.infer_fast(
+            sampling_rate, wav_data = tts.infer_fast(
                 prompt_path,
                 text,
                 None,
