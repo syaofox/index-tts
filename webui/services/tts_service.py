@@ -2,7 +2,6 @@ import gradio as gr
 import numpy as np
 import torch
 import torchaudio
-import random
 
 from indextts.infer import IndexTTS
 from webui.utils.text_processor import TextProcessor
@@ -33,7 +32,7 @@ class TTS_Service:
         torchaudio.save(file_path, wav_tensor, sampling_rate)
 
     def gen_wavdata(
-        self, prompt_path, text, infer_mode, silence_duration=0.3,  tts_version=1, max_text_tokens_per_sentence=80, split_mode="sentence"
+        self, prompt_path, text, infer_mode, silence_duration=0.3, tts_version=1, max_text_tokens_per_sentence=80, split_mode="sentence"
     ):
         """根据选择的参考音频名称和文本生成音频数据"""
 
@@ -80,17 +79,6 @@ class TTS_Service:
             )  # 批次推理
         return sampling_rate, wav_data
 
-    def _set_all_seeds(self, seed):
-        """Sets the seed for reproducibility across different libraries."""
-        random.seed(seed)
-        np.random.seed(seed)
-        torch.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
-            torch.cuda.manual_seed_all(seed)
-
-        return seed
-
     def gen_wavdata_togr(
         self,
         speaker,
@@ -98,17 +86,11 @@ class TTS_Service:
         text,
         infer_mode,
         silence_duration=0.3,
-        seed=0,
         tts_version=1,
         max_text_tokens_per_sentence=80,
         split_mode="sentence",
     ):
         # self.tts.gr_progress = progress
-
-        # 设置cuda随机种子
-        if seed != 0:
-            debug(f"设置cuda随机种子: {seed}")
-            self._set_all_seeds(seed)
 
         # 预处理文本
         text_segments = self.text_processor.preprocess_text(text, speaker)
@@ -142,17 +124,15 @@ class TTS_Service:
                 _prompt_path = prompt_path
 
             _silence_duration = silence_duration
-            _seed = seed
             _tts_version = tts_version
 
             if self.config_service and _speaker:
                 settings = self.config_service.get_audio_settings(_speaker)
                 _silence_duration = settings.get("silence_duration", silence_duration)
-                _seed = settings.get("seed", seed)
                 _tts_version = settings.get("tts_version", tts_version)
 
             debug(
-                f"当前角色: {_speaker}, 当前文本: {_text}, 静音时长={_silence_duration}, 随机种子={_seed}, TTS版本={_tts_version}"
+                f"当前角色: {_speaker}, 当前文本: {_text}, 静音时长={_silence_duration}, TTS版本={_tts_version}"
             )
 
             # 处理空行
@@ -193,7 +173,7 @@ class TTS_Service:
         speaker_str = speakers[0] if len(speakers) == 1 else f"{speakers[0]}等多角色"
 
         output_path = self.text_processor.generate_output_filename(
-            speaker_str, text, seed
+            speaker_str, text,tts_version
         )
         info(f"语音合成完成: {output_path}")
 
