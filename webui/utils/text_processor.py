@@ -58,7 +58,7 @@ class TextProcessor:
         """
         清除引号
         """
-        pattern = r"[\"\'\*\#“”‘’]"
+        pattern = r"[\"\'\*\#“”‘’·]"
         return re.sub(pattern, "", text)
 
     def _apply_replace_rules(self, text: str) -> str:

@@ -442,8 +442,7 @@ class TextTokenizer:
         # 按照标点符号切分
 
         result = []        
-        punctuation_marks= '.!?;！？；。'
-        punctuation_marks = '.!?;！？；。'
+        punctuation_marks = '.!?;！？；。：'
 
         # 在标点符号后面分割文本
         pattern = r"(?<=[{}])".format(punctuation_marks)
