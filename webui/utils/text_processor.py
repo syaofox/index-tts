@@ -114,6 +114,9 @@ class TextProcessor:
         # 清除引号
         text = self._clean_quotes(text)
 
+        # 替换中文破折号
+        text = re.sub(r"——", "-", text)
+
         # 应用替换规则
         text = self._apply_replace_rules(text)
 
