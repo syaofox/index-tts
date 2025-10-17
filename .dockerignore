@@ -1,0 +1,63 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+.venv
+venv
+env
+ENV
+
+# IDEs
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+.dockerignore
+Dockerfile
+docker-compose.yml
+
+# Documentation (already in image if needed)
+# *.md  # 注释掉，因为构建时需要 README.md
+docs/
+*.md
+!README.md
+
+# Archives
+archive/
+
+# Tests (not needed in production)
+tests/
+
+# Cache and temporary files
+*.log
+*.tmp
+.cache
+
+# Model checkpoints (will be downloaded during build)
+# Comment out if you want to include pre-downloaded models
+# checkpoints/
+
+# Output files
+*.wav
+gen.wav
+
