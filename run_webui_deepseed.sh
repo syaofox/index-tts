@@ -15,4 +15,4 @@ set -e
 export HF_HOME="$PWD/.cache/hf_download"
 export MODELSCOPE_CACHE="$PWD/.cache/modelscope"
 
-uv run webui.py --verbose --fp16
+uv run webui.py --verbose --fp16 --deepspeed

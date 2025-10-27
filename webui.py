@@ -51,7 +51,7 @@ import gradio as gr
 from indextts.infer_v2 import IndexTTS2
 from tools.i18n.i18n import I18nAuto
 
-i18n = I18nAuto(language="Auto")
+i18n = I18nAuto(language="zh_CN")
 MODE = 'local'
 tts = IndexTTS2(model_dir=cmd_args.model_dir,
                 cfg_path=os.path.join(cmd_args.model_dir, "config.yaml"),
