@@ -136,7 +136,7 @@ def gen_single(emo_control_method,prompt, text,
     # set gradio progress
     tts.gr_progress = progress
     do_sample, top_p, top_k, temperature, \
-        length_penalty, num_beams, repetition_penalty, max_mel_tokens = args
+        length_penalty, num_beams, repetition_penalty, max_mel_tokens, speed = args
     kwargs = {
         "do_sample": bool(do_sample),
         "top_p": float(top_p),
@@ -174,6 +174,7 @@ def gen_single(emo_control_method,prompt, text,
                        use_emo_text=(emo_control_method==3), emo_text=emo_text,use_random=emo_random,
                        verbose=cmd_args.verbose,
                        max_text_tokens_per_segment=int(max_text_tokens_per_segment),
+                       speed=float(speed),
                        **kwargs)
     return gr.update(value=output,visible=True)
 
@@ -300,6 +301,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
                         repetition_penalty = gr.Number(label="repetition_penalty", precision=None, value=10.0, minimum=0.1, maximum=20.0, step=0.1)
                         length_penalty = gr.Number(label="length_penalty", precision=None, value=0.0, minimum=-2.0, maximum=2.0, step=0.1)
                     max_mel_tokens = gr.Slider(label="max_mel_tokens", value=1500, minimum=50, maximum=tts.cfg.gpt.max_mel_tokens, step=10, info=i18n("生成Token最大数量，过小导致音频被截断"), key="max_mel_tokens")
+                    speed = gr.Slider(label=i18n("语速"), value=1.0, minimum=0.5, maximum=2.0, step=0.1, info=i18n("语速倍数，1.0为正常语速，大于1.0加快，小于1.0减慢"), key="speed")
                     # with gr.Row():
                     #     typical_sampling = gr.Checkbox(label="typical_sampling", value=False, info="不建议使用")
                     #     typical_mass = gr.Slider(label="typical_mass", value=0.9, minimum=0.0, maximum=1.0, step=0.1)
@@ -320,6 +322,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
             advanced_params = [
                 do_sample, top_p, top_k, temperature,
                 length_penalty, num_beams, repetition_penalty, max_mel_tokens,
+                speed,
                 # typical_sampling, typical_mass,
             ]
 
