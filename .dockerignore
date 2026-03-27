@@ -63,7 +63,7 @@ dist/
 checkpoints/
 
 # hf_cache (Hugging Face model cache)
-.hf_cache/
+hf_cache/
 
 # Outputs
 outputs/
@@ -74,3 +74,12 @@ outputs/
 *.tmp
 *.temp
 .*_temp/
+
+# Development files
+assets/
+archive/
+docs/
+test-docker.sh
+MANIFEST.in
+.python-version
+.DS_Store

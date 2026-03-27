@@ -9,19 +9,19 @@ services:
       - "7860:7860"
     volumes:
       # Mount source code for live development (no rebuild needed)
-      - ./indextts:/home/appuser/app/indextts
-      - ./webui.py:/home/appuser/app/webui.py
-      - ./tools:/home/appuser/app/tools
+      - ./indextts:/app/indextts
+      - ./webui.py:/app/webui.py
+      - ./tools:/app/tools
       # Mount model checkpoints from host
-      - ./checkpoints:/home/appuser/app/checkpoints:ro
+      - ./checkpoints:/app/checkpoints:ro
       # Mount outputs directory to persist generated audio
-      - ./outputs:/home/appuser/app/outputs
+      - ./outputs:/app/outputs
       # Mount HuggingFace cache to avoid re-downloading models
       - ./hf_cache:/home/appuser/.cache/huggingface
       # Mount examples directory for easy access to sample inputs
-      - ./examples:/home/appuser/app/examples
+      - ./examples:/app/examples
       # Mount tests directory for running test cases
-      - ./tests:/home/appuser/app/tests
+      - ./tests:/app/tests
       # Sync host timezone
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
@@ -40,7 +40,7 @@ services:
       # 启用 FP16 半精度推理
       - INDXTTS_FP16=true
       # 启用 DeepSpeed 加速
-      - INDXTTS_DEEPSPEED=false
+      - INDXTTS_DEEPSPEED=true
       # 启用 CUDA 内核加速
       - INDXTTS_CUDA_KERNEL=false
       # GUI 分句最大 Token 数

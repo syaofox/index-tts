@@ -58,4 +58,4 @@ echo "CUDA Kernel: $CUDA_KERNEL"
 echo "GUI Seg Tokens: $GUI_SEG_TOKENS"
 
 # Execute the WebUI with all arguments
-exec python webui.py $CMD_ARGS
+exec /app/.venv/bin/python3 webui.py $CMD_ARGS
