@@ -1,0 +1,65 @@
+services:
+  indextts-webui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: index-tts:latest
+    container_name: indextts-webui
+    ports:
+      - "7860:7860"
+    volumes:
+      # Mount model checkpoints from host
+      - ./checkpoints:/home/appuser/app/checkpoints:ro
+      # Mount outputs directory to persist generated audio
+      - ./outputs:/home/appuser/app/outputs
+      # Mount HuggingFace cache to avoid re-downloading models
+      - ./hf_cache:/home/appuser/.cache/huggingface
+      # Mount examples directory for easy access to sample inputs
+      - ./examples:/home/appuser/app/examples
+      # Mount tests directory for running test cases
+      - ./tests:/home/appuser/app/tests
+      # Sync host timezone
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+
+    environment:
+      # GPU 设备配置
+      - NVIDIA_VISIBLE_DEVICES=all
+      # Python 输出不缓冲
+      - PYTHONUNBUFFERED=1
+      # 监听地址
+      - INDXTTS_HOST=0.0.0.0
+      # 监听端口
+      - INDXTTS_PORT=7860
+      # 模型检查点目录
+      - INDXTTS_MODEL_DIR=./checkpoints
+      # 启用 FP16 半精度推理
+      - INDXTTS_FP16=true
+      # 启用 DeepSpeed 加速
+      - INDXTTS_DEEPSPEED=false
+      # 启用 CUDA 内核加速
+      - INDXTTS_CUDA_KERNEL=false
+      # GUI 分句最大 Token 数
+      - INDXTTS_GUI_SEG_TOKENS=120
+      # 启用详细日志输出
+      - INDXTTS_VERBOSE=false
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    # Optional: Set logging options
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
