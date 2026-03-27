@@ -39,14 +39,14 @@ services:
       - INDXTTS_MODEL_DIR=./checkpoints
       # 启用 FP16 半精度推理
       - INDXTTS_FP16=true
-      # 启用 DeepSpeed 加速
-      - INDXTTS_DEEPSPEED=true
+      # 启用 DeepSpeed 加速 (需使用 Dockerfile.devel 构建)
+      - INDXTTS_DEEPSPEED=false
       # 启用 CUDA 内核加速
       - INDXTTS_CUDA_KERNEL=false
       # GUI 分句最大 Token 数
       - INDXTTS_GUI_SEG_TOKENS=120
       # 启用详细日志输出
-      - INDXTTS_VERBOSE=false
+      - INDXTTS_VERBOSE=true
     deploy:
       resources:
         reservations:

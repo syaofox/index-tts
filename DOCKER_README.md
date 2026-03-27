@@ -31,6 +31,18 @@ docker compose up --build -d
 
 打开浏览器访问：http://localhost:7860
 
+## Dockerfile 版本说明
+
+| 文件 | 基础镜像 | DeepSpeed | 预估大小 | 用途 |
+|------|----------|-----------|----------|------|
+| `Dockerfile` | `cuda:12.8.0-runtime` | ❌ | ~7GB | 日常使用 |
+| `Dockerfile.devel` | `cuda:12.8.0-devel` | ✅ | ~10GB | 需要 DeepSpeed 加速 |
+
+使用完整版构建：
+```bash
+docker compose build --build-arg DOCKERFILE=Dockerfile.devel indextts-webui
+```
+
 ## 配置选项
 
 可以通过环境变量配置容器行为：
@@ -53,8 +65,8 @@ INDXTTS_PORT=8080
 | `INDXTTS_HOST` | `0.0.0.0` | 监听地址 |
 | `INDXTTS_PORT` | `7860` | 监听端口 |
 | `INDXTTS_MODEL_DIR` | `./checkpoints` | 模型目录 |
-| `INDXTTS_FP16` | `false` | 启用 FP16 推理 |
-| `INDXTTS_DEEPSPEED` | `false` | 启用 DeepSpeed |
+| `INDXTTS_FP16` | `true` | 启用 FP16 推理 |
+| `INDXTTS_DEEPSPEED` | `false` | 启用 DeepSpeed（需 `Dockerfile.devel`） |
 | `INDXTTS_CUDA_KERNEL` | `false` | 启用 CUDA 内核 |
 | `INDXTTS_GUI_SEG_TOKENS` | `120` | 分句最大 Token 数 |
 | `INDXTTS_VERBOSE` | `false` | 启用详细日志 |
@@ -63,6 +75,7 @@ INDXTTS_PORT=8080
 
 - **模型检查点**：只读挂载到 `./checkpoints`
 - **生成音频**：持久化到 `./outputs`
+- **HuggingFace 缓存**：持久化到 `./hf_cache`
 
 ## 常用命令
 
@@ -98,6 +111,11 @@ docker run --rm --gpus all nvidia/cuda:12.8.0-runtime-ubuntu22.04 nvidia-smi
 ports:
   - "8080:7860"  # 使用 8080 端口访问
 ```
+
+### 4. DeepSpeed 报错
+默认镜像不含 DeepSpeed，如需启用：
+1. 使用 `Dockerfile.devel` 构建
+2. 设置 `INDXTTS_DEEPSPEED=true`
 
 ## 生产部署建议
 
