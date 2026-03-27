@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.8.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
 
 # Prevent interactive prompts during apt-get install
 ENV DEBIAN_FRONTEND=noninteractive
@@ -42,14 +42,14 @@ USER appuser
 
 # Install Python, dependencies and project
 RUN --mount=type=cache,target=/tmp/uv-cache,uid=1000,gid=1000 \
-    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --extra webui
+    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --all-extras
 
 # Set environment variables
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
 
-# Create directories for models, outputs, and Triton cache
+# Create directories for models, outputs, and DeepSpeed CUDA extension cache
 RUN mkdir -p /app/checkpoints /app/outputs /home/appuser/.cache /home/appuser/.triton/autotune \
     && chmod +x /app/docker-entrypoint.sh
 
