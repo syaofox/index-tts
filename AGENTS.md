@@ -1,5 +1,19 @@
 # AGENTS.md - IndexTTS
 
+## 开发环境注意
+
+**本机没有开发环境,所有代码测试需通过 Docker 容器进行。**
+
+```bash
+# 构建并进入容器
+docker build -t indextts .
+docker run -it --rm -v $(pwd):/workspace indextts bash
+
+# 在容器内运行测试
+python tests/regression_test.py
+python tests/padding_test.py checkpoints
+```
+
 ## Project Overview
 
 IndexTTS2 is a GPT-based autoregressive zero-shot text-to-speech system by Bilibili. It uses PyTorch, supports Chinese and English, and provides emotion control via vectors, reference audio, or text descriptions.
