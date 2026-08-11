@@ -19,9 +19,7 @@ RUN locale-gen zh_CN.UTF-8
 # Install uv from official image
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Set environment variables
-ENV LANG=zh_CN.UTF-8
-ENV LC_ALL=zh_CN.UTF-8
+# Build-time environment (must be set before `uv sync`)
 ENV UV_COMPILE_BYTECODE=1
 ENV UV_LINK_MODE=copy
 ENV UV_PYTHON=3.10
@@ -31,8 +29,9 @@ ENV PATH="/usr/local/cuda/bin:$PATH"
 
 WORKDIR /app
 
-# Copy project files
-COPY . .
+# Dependency layer: only changes to these two files invalidate it,
+# so code edits rebuild in seconds instead of reinstalling everything.
+COPY pyproject.toml uv.lock ./
 
 # Create non-root user and take ownership of /app
 RUN useradd -m -u 1000 appuser \
@@ -40,18 +39,29 @@ RUN useradd -m -u 1000 appuser \
 
 USER appuser
 
-# Install Python, dependencies and project
+# Install dependencies only (the project itself runs from source via PYTHONPATH=/app)
 RUN --mount=type=cache,target=/tmp/uv-cache,uid=1000,gid=1000 \
-    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --extra webui
+    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --no-install-project --extra webui
 
-# Set environment variables
+# Copy project files
+COPY . .
+
+# Take ownership of the copied sources
+USER root
+RUN chown -R appuser:appuser /app \
+    && mkdir -p /app/checkpoints /app/outputs /home/appuser/.cache /home/appuser/.triton/autotune \
+    && chmod +x /app/docker-entrypoint.sh
+
+USER appuser
+
+# Runtime environment (after dependency installation so env edits
+# don't invalidate the expensive `uv sync` layer)
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"
 ENV PYTHONUNBUFFERED=1
-
-# Create directories for models, outputs, and Triton cache
-RUN mkdir -p /app/checkpoints /app/outputs /home/appuser/.cache /home/appuser/.triton/autotune \
-    && chmod +x /app/docker-entrypoint.sh
+ENV LANG=zh_CN.UTF-8
+ENV LC_ALL=zh_CN.UTF-8
+ENV TZ=Asia/Shanghai
 
 # Expose WebUI port
 EXPOSE 7860

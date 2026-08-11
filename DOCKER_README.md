@@ -10,12 +10,26 @@
 
 ### 1. 准备模型检查点
 
-将模型文件放置在 `checkpoints/` 目录下，确保包含以下文件：
+**无需手动准备**：容器首次启动时，webui.py 会自动检测所选版本（`INDXTTS_VERSION`，默认 `2.5`）的必需文件并自动下载到挂载的 `checkpoints/` 目录（含辅助模型，位于 `checkpoints/hf_cache/`）。
+
+如需预先手动下载（可离线部署），按版本放置对应文件：
+
+**IndexTTS-2.5**（默认）:
+- `gpt.pth`
+- `s2mel.pth`
+- `codec.pth`
+- `multilingual_zh_ja_yue_char_del.tiktoken`
+- `wav2vec2bert_stats.pt`
+
+**IndexTTS-2**:
 - `bpe.model`
 - `gpt.pth`
-- `config.yaml`
 - `s2mel.pth`
 - `wav2vec2bert_stats.pt`
+
+> 提示：确保宿主 `checkpoints/` 目录存在且当前用户有写权限
+> （Docker 挂载目录的权限由宿主机决定）。辅助模型还会下载到
+> `checkpoints/hf_cache/`，请预留足够磁盘空间（约 5-10GB）。
 
 ### 2. 构建并启动容器
 
@@ -65,15 +79,18 @@ INDXTTS_PORT=8080
 | `INDXTTS_HOST` | `0.0.0.0` | 监听地址 |
 | `INDXTTS_PORT` | `7860` | 监听端口 |
 | `INDXTTS_MODEL_DIR` | `./checkpoints` | 模型目录 |
-| `INDXTTS_FP16` | `true` | 启用 FP16 推理 |
+| `INDXTTS_VERSION` | `2.5` | 模型版本（`2` 或 `2.5`） |
+| `INDXTTS_FP16` | `true` | 启用 FP16 推理（v2.5 下为 BF16） |
 | `INDXTTS_DEEPSPEED` | `false` | 启用 DeepSpeed（需 `Dockerfile.devel`） |
 | `INDXTTS_CUDA_KERNEL` | `false` | 启用 CUDA 内核 |
+| `INDXTTS_ACCEL` | `false` | 启用 GPT2 加速引擎（需 `Dockerfile.devel`） |
+| `INDXTTS_TORCH_COMPILE` | `false` | 启用 torch.compile 优化 s2mel（需 `Dockerfile.devel`） |
 | `INDXTTS_GUI_SEG_TOKENS` | `120` | 分句最大 Token 数 |
 | `INDXTTS_VERBOSE` | `false` | 启用详细日志 |
 
 ## 数据持久化
 
-- **模型检查点**：只读挂载到 `./checkpoints`
+- **模型检查点**：读写挂载到 `./checkpoints`（自动下载，含 `hf_cache`）
 - **生成音频**：持久化到 `./outputs`
 - **HuggingFace 缓存**：持久化到 `./hf_cache`
 
@@ -103,7 +120,8 @@ docker run --rm --gpus all nvidia/cuda:12.8.0-runtime-ubuntu22.04 nvidia-smi
 ```
 
 ### 2. 模型文件缺失
-检查 `checkpoints/` 目录是否包含所有必需文件。
+检查 `checkpoints/` 目录是否包含所选版本（`INDXTTS_VERSION`）的必需文件；
+容器会自动下载，若下载失败请检查网络（国内环境可能需配置代理或改用 hf-mirror）。
 
 ### 3. 端口冲突
 修改 `docker-compose.yml` 中的端口映射：

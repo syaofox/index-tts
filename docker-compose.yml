@@ -12,8 +12,10 @@ services:
       - ./indextts:/app/indextts
       - ./webui.py:/app/webui.py
       - ./tools:/app/tools
-      # Mount model checkpoints from host
-      - ./checkpoints:/app/checkpoints:ro
+      # Mount model checkpoints from host.
+      # Writable: webui.py auto-downloads missing model files (main + aux/hf_cache)
+      # into this directory on first start.
+      - ./checkpoints:/app/checkpoints
       # Mount outputs directory to persist generated audio
       - ./outputs:/app/outputs
       # Mount HuggingFace cache to avoid re-downloading models
@@ -22,9 +24,8 @@ services:
       - ./examples:/app/examples
       # Mount tests directory for running test cases
       - ./tests:/app/tests
-      # Sync host timezone
+      # Sync host timezone (note: /etc/timezone does not exist on all hosts, e.g. Arch Linux)
       - /etc/localtime:/etc/localtime:ro
-      - /etc/timezone:/etc/timezone:ro
 
     environment:
       # GPU 设备配置
@@ -37,12 +38,18 @@ services:
       - INDXTTS_PORT=7860
       # 模型检查点目录
       - INDXTTS_MODEL_DIR=./checkpoints
-      # 启用 FP16 半精度推理
+      # 模型版本 (2 或 2.5)
+      - INDXTTS_VERSION=2.5
+      # 启用 FP16 半精度推理 (v2.5 下为 BF16)
       - INDXTTS_FP16=true
       # 启用 DeepSpeed 加速 (需使用 Dockerfile.devel 构建)
       - INDXTTS_DEEPSPEED=false
       # 启用 CUDA 内核加速
       - INDXTTS_CUDA_KERNEL=false
+      # 启用 GPT2 加速引擎 (需使用 Dockerfile.devel 构建)
+      - INDXTTS_ACCEL=false
+      # 启用 torch.compile 优化 s2mel (需使用 Dockerfile.devel 构建)
+      - INDXTTS_TORCH_COMPILE=false
       # GUI 分句最大 Token 数
       - INDXTTS_GUI_SEG_TOKENS=120
       # 启用详细日志输出
