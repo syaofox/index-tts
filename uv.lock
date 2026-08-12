@@ -882,7 +882,7 @@ accel = [
     { name = "flash-attn" },
     { name = "nvidia-cuda-runtime-cu12" },
     { name = "nvidia-cudnn-cu12" },
-    { name = "triton-windows" },
+    { name = "triton-windows", marker = "sys_platform == 'win32'" },
 ]
 deepspeed = [
     { name = "deepspeed" },
@@ -891,7 +891,7 @@ test = [
     { name = "pytest" },
 ]
 torch-compile = [
-    { name = "triton-windows" },
+    { name = "triton-windows", marker = "sys_platform == 'win32'" },
 ]
 webui = [
     { name = "gradio" },
@@ -939,8 +939,8 @@ requires-dist = [
     { name = "torchaudio", marker = "sys_platform == 'linux' or sys_platform == 'win32'", specifier = "==2.8.*", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm", specifier = ">=4.67.1" },
     { name = "transformers", specifier = "==4.52.1" },
-    { name = "triton-windows", marker = "extra == 'accel'", specifier = "==3.1.0.post17" },
-    { name = "triton-windows", marker = "extra == 'torch-compile'", specifier = "==3.1.0.post17" },
+    { name = "triton-windows", marker = "sys_platform == 'win32' and extra == 'accel'", specifier = "==3.1.0.post17" },
+    { name = "triton-windows", marker = "sys_platform == 'win32' and extra == 'torch-compile'", specifier = "==3.1.0.post17" },
     { name = "unidic-lite", specifier = ">=1.0.0" },
     { name = "wetext", marker = "sys_platform != 'linux'", specifier = ">=0.0.9" },
     { name = "wetextprocessing", marker = "sys_platform == 'linux'" },

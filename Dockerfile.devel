@@ -3,13 +3,14 @@ FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
 # Prevent interactive prompts during apt-get install
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install system dependencies for audio and locale
+# Install system dependencies for audio, locale and compilation (flash-attn needs ninja)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
     libsndfile1 \
     locales \
     language-pack-zh-hans \
+    ninja-build \
     tzdata \
     && rm -rf /var/lib/apt/lists/*
 
@@ -39,9 +40,20 @@ RUN useradd -m -u 1000 appuser \
 
 USER appuser
 
-# Install dependencies only (the project itself runs from source via PYTHONPATH=/app)
-RUN --mount=type=cache,target=/tmp/uv-cache,uid=1000,gid=1000 \
-    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --no-install-project --all-extras
+# Install dependencies only (the project itself runs from source via PYTHONPATH=/app).
+# NOTE: DeepSpeed is intentionally NOT installed (single-GPU has no benefit and
+# adds a long compilation step). Install it with `uv sync --extra deepspeed` if needed.
+# Install dependencies only (the project itself runs from source via PYTHONPATH=/app).
+# torch_compile's triton ships as a wheel with torch on Linux (no compilation).
+# ACCEL (flash-attn) is intentionally NOT installed: it requires a 2-4h source
+# build (and 8-15 GB RAM per nvcc job) for a small speedup. To enable it, add
+# `--extra accel` back here (pyproject.toml already carries the build settings).
+#
+# NOTE: no cache mount on purpose - the installed .venv is baked into this layer,
+# so as long as pyproject.toml / uv.lock are unchanged the layer is CACHED and
+# nothing is re-downloaded or re-compiled.
+RUN UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --no-install-project \
+    --extra webui --extra torch_compile
 
 # Copy project files
 COPY . .

@@ -39,9 +39,11 @@ RUN useradd -m -u 1000 appuser \
 
 USER appuser
 
-# Install dependencies only (the project itself runs from source via PYTHONPATH=/app)
-RUN --mount=type=cache,target=/tmp/uv-cache,uid=1000,gid=1000 \
-    UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --no-install-project --extra webui
+# Install dependencies only (the project itself runs from source via PYTHONPATH=/app).
+# NOTE: no cache mount on purpose - the installed .venv is baked into this layer,
+# so as long as pyproject.toml / uv.lock are unchanged the layer is CACHED and
+# nothing is re-downloaded or re-compiled.
+RUN UV_CACHE_DIR=/tmp/uv-cache uv sync --frozen --no-dev --no-install-project --extra webui
 
 # Copy project files
 COPY . .

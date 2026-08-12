@@ -2,7 +2,7 @@ services:
   indextts-webui:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.devel
     image: index-tts:latest
     container_name: indextts-webui
     ports:
@@ -46,10 +46,11 @@ services:
       - INDXTTS_DEEPSPEED=false
       # 启用 CUDA 内核加速
       - INDXTTS_CUDA_KERNEL=false
-      # 启用 GPT2 加速引擎 (需使用 Dockerfile.devel 构建)
+      # GPT2 加速引擎 (flash-attn) 需源码编译 2-4h 且收益有限,默认关闭;
+      # 如需启用,在 Dockerfile.devel 的 uv sync 中加回 --extra accel
       - INDXTTS_ACCEL=false
       # 启用 torch.compile 优化 s2mel (需使用 Dockerfile.devel 构建)
-      - INDXTTS_TORCH_COMPILE=false
+      - INDXTTS_TORCH_COMPILE=true
       # GUI 分句最大 Token 数
       - INDXTTS_GUI_SEG_TOKENS=120
       # 启用详细日志输出

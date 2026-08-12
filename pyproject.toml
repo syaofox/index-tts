@@ -82,12 +82,12 @@ accel = [
   "flash-attn==2.8.3.post1",
   "nvidia-cuda-runtime-cu12",
   "nvidia-cudnn-cu12",
-  "triton-windows==3.1.0.post17",
+  "triton-windows==3.1.0.post17; sys_platform == 'win32'",
 ]
 # To install torch.compile support for s2mel, use `uv sync --extra torch_compile` (or `--all-extras`).
 # On Windows this is satisfied by the triton-windows package above.
 torch_compile = [
-  "triton-windows==3.1.0.post17",
+  "triton-windows==3.1.0.post17; sys_platform == 'win32'",
 ]
 test = [
   "pytest>=7.0",
@@ -120,6 +120,9 @@ build-backend = "hatchling.build"
 # its compilation to determine what GPU support to compile for itself. It also
 # saves time, since it won't waste time downloading a generic PyTorch version.
 no-build-isolation-package = ["deepspeed"]
+# flash-attn's setup.py imports torch at build time but doesn't declare it as a
+# build dependency, so provide it inside the isolated build environment.
+extra-build-dependencies = { flash-attn = ["torch"] }
 
 [tool.uv.sources]
 # Install PyTorch with CUDA support on Linux/Windows (CUDA doesn't exist for Mac).

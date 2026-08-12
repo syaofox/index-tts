@@ -47,14 +47,20 @@ docker compose up --build -d
 
 ## Dockerfile 版本说明
 
-| 文件 | 基础镜像 | DeepSpeed | 预估大小 | 用途 |
-|------|----------|-----------|----------|------|
-| `Dockerfile` | `cuda:12.8.0-runtime` | ❌ | ~7GB | 日常使用 |
-| `Dockerfile.devel` | `cuda:12.8.0-devel` | ✅ | ~10GB | 需要 DeepSpeed 加速 |
+| 文件 | 基础镜像 | 加速能力 | 预估大小 | 用途 |
+|------|----------|----------|----------|------|
+| `Dockerfile` | `cuda:12.8.0-runtime` | 无 | ~7GB | 日常使用 |
+| `Dockerfile.devel` | `cuda:12.8.0-devel` | Triton（`TORCH_COMPILE`，无编译） | ~10GB | 启用 `TORCH_COMPILE` 加速 |
 
-使用完整版构建：
+> 说明：`Dockerfile.devel` 默认不含 DeepSpeed（单卡无收益且编译耗时）。
+> 如需 DeepSpeed，在镜像内执行 `uv sync --extra deepspeed`。
+>
+> `ACCEL`（flash-attn）默认关闭：需源码编译 2-4 小时且收益有限，
+> 如需启用请修改 `Dockerfile.devel` 的 uv sync 添加 `--extra accel`。
+
+使用加速版构建（当前 `docker-compose.yml` 默认已指向 `Dockerfile.devel`）：
 ```bash
-docker compose build --build-arg DOCKERFILE=Dockerfile.devel indextts-webui
+docker compose build indextts-webui
 ```
 
 ## 配置选项
@@ -83,7 +89,7 @@ INDXTTS_PORT=8080
 | `INDXTTS_FP16` | `true` | 启用 FP16 推理（v2.5 下为 BF16） |
 | `INDXTTS_DEEPSPEED` | `false` | 启用 DeepSpeed（需 `Dockerfile.devel`） |
 | `INDXTTS_CUDA_KERNEL` | `false` | 启用 CUDA 内核 |
-| `INDXTTS_ACCEL` | `false` | 启用 GPT2 加速引擎（需 `Dockerfile.devel`） |
+| `INDXTTS_ACCEL` | `false` | GPT2 加速引擎（flash-attn，默认关闭，需自行编译） |
 | `INDXTTS_TORCH_COMPILE` | `false` | 启用 torch.compile 优化 s2mel（需 `Dockerfile.devel`） |
 | `INDXTTS_GUI_SEG_TOKENS` | `120` | 分句最大 Token 数 |
 | `INDXTTS_VERBOSE` | `false` | 启用详细日志 |
@@ -131,9 +137,17 @@ ports:
 ```
 
 ### 4. DeepSpeed 报错
-默认镜像不含 DeepSpeed，如需启用：
-1. 使用 `Dockerfile.devel` 构建
+镜像默认不含 DeepSpeed（`Dockerfile.devel` 亦然）。如需启用：
+1. 在容器内执行 `uv sync --extra deepspeed`（或自行修改 Dockerfile 加入 `--extra deepspeed`）
 2. 设置 `INDXTTS_DEEPSPEED=true`
+
+### 5. 加速选项（TORCH_COMPILE）
+需使用 `Dockerfile.devel` 构建（含 Triton，无需编译）。
+容器首次启动时 `torch.compile` 会预编译 s2mel（数分钟，仅首次）。
+
+`ACCEL`（flash-attn）默认关闭：需要从源码编译 2-4 小时且收益有限。
+如需启用，修改 `Dockerfile.devel` 的 uv sync 命令添加 `--extra accel`
+（`pyproject.toml` 已含所需的构建配置 `extra-build-dependencies`）。
 
 ## 生产部署建议
 
