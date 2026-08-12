@@ -52,6 +52,7 @@ COPY . .
 USER root
 RUN chown -R appuser:appuser /app \
     && mkdir -p /app/checkpoints /app/outputs /home/appuser/.cache /home/appuser/.triton/autotune \
+    && chown -R appuser:appuser /home/appuser \
     && chmod +x /app/docker-entrypoint.sh
 
 USER appuser
