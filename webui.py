@@ -1179,12 +1179,23 @@ with gr.Blocks(
                         outputs=example_outputs
     )
 
-    def on_input_text_change(text, max_text_tokens_per_segment):
+    def on_input_text_change(text, max_text_tokens_per_segment, lang_choice):
         if text and len(text) > 0:
             if IS_V25:
-                # v2.5 uses tiktoken encoder, no split_segments; show token count only
-                tokens = tts.tokenizer.encode(text, allowed_special='all')
-                data = [[0, text, len(tokens)]]
+                # v2.5 uses tiktoken encoder: reuse the same splitter as inference
+                # so the preview matches the actual segmentation.
+                lang_prefix = ""
+                if lang_choice and lang_choice != "ZH":
+                    lang_prefix = f"<|{lang_choice.lower()}|> "
+                segments = tts.split_text_by_tokens(
+                    text, int(max_text_tokens_per_segment), lang_prefix=lang_prefix
+                )
+                data = []
+                for i, s in enumerate(segments):
+                    tokens_count = len(
+                        tts.tokenizer.encode(lang_prefix + s, allowed_special="all")
+                    )
+                    data.append([i, s, tokens_count])
             else:
                 text_tokens_list = tts.tokenizer.tokenize(text)
                 segments = tts.tokenizer.split_segments(text_tokens_list, max_text_tokens_per_segment=int(max_text_tokens_per_segment))
@@ -1325,13 +1336,13 @@ with gr.Blocks(
 
     input_text_single.change(
         on_input_text_change,
-        inputs=[input_text_single, max_text_tokens_per_segment],
+        inputs=[input_text_single, max_text_tokens_per_segment, lang_dropdown],
         outputs=[segments_preview],
     )
 
     max_text_tokens_per_segment.change(
         on_input_text_change,
-        inputs=[input_text_single, max_text_tokens_per_segment],
+        inputs=[input_text_single, max_text_tokens_per_segment, lang_dropdown],
         outputs=[segments_preview],
     )
 
